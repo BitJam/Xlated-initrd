@@ -2740,19 +2740,6 @@ cp_dir() {
 }
 
 # FIXME: should use ld_path and --apparent-size se we aren't fooled by sparseness
-file_usage_k() {
-    local f file dir=$1
-    shift
-
-    [ "$dir" -a "${dir##*/}" ] && dir=$dir/
-    for f; do
-        file=$dir$f
-        [ -e $file ] && list="$list $file"
-    done
-    du -scxk $list >> $MY_LOG
-    du -scxk $list | tail -n 1 | cut -f1
-}
-
 file_usage_m() {
     local f file dir=$1
     shift
@@ -2764,12 +2751,6 @@ file_usage_m() {
     done
     du -scxm $list >> $MY_LOG
     du -scxm $list | tail -n 1 | cut -f1
-}
-
-
-xxxfile_usage_m() {
-    local k=$(file_usage_k "$@")
-    echo $(( k / 1024))
 }
 
 copy_files() {
@@ -2786,8 +2767,26 @@ copy_files() {
 
 all_space()      { $LIVE_BIN/df -m "$1" | awk '{size=$2}END{print size}' ;}
 used_space()     { $LIVE_BIN/df -m "$1" | awk '{size=$3}END{print size}' ;}
-free_space()     { $LIVE_BIN/df -m "$1" | awk '{size=$4}END{print size}' ;}
+#free_space()     { $LIVE_BIN/df -m "$1" | awk '{size=$4}END{print size}' ;}
 get_mountpoint() { grep "^$1 " /proc/mounts | cut -d" " -f2              ;}
+
+# This compensates for sparse rootfs and homefs files one directory down from
+# the mountpoint.  This is far from perfect but I hope it is a reasonable
+# compromise that will work well for most people in most situations.
+free_space() {
+    local mp=$1
+    local free=$($LIVE_BIN/df -m $mp | awk '{size=$4}END{print size}')
+    local sparse new_free
+    for sparse in $mp/*/rootfs $mp/*/homefs; do
+        test -e $sparse || continue
+        real=$(( $( stat -c %s $sparse) / 1024 / 1024))
+        orig=$(du -m $sparse | cut -f1)
+        new_free=$((free - $real + $orig))
+        printf  "$_sparse_r_X_o_Y_of_Z_nf_XX_YY_" $real $orig $free $new_free $sparse >> $MY_LOG
+        free=$new_free
+    done
+    echo $free
+}
 
 dir_has_param() {
     local dir=$1  want_param=$2
