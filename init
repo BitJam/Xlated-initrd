@@ -198,7 +198,7 @@ main_wrapper() {
 
     free -m >> $MY_LOG
     echo 3 > /proc/sys/vm/drop_caches
-    vmsg 6  "$_drop_caches_"
+    vmsg 6 'drop caches'
     free -m >> $MY_LOG
 
     breakpoint 9 "right before starting init"
@@ -218,7 +218,7 @@ main_wrapper() {
     if find_init_prog INIT_PROG $NEW_ROOT; then
 
         vmsg 4 'Run %s instead of %s' $white$INIT_PROG$m_co $white/sbin/init$m_co
-        vmsg 5 "${hi_co}%s"  "$_Please_exit_shells_normally_to_allow_for_a_clean_unmount_"
+        vmsg 5 "${hi_co}%s" 'Please exit shells normally to allow for a clean unmount'
 
         CHROOT_BIN=$FINAL_DIR/bin
         chroot $NEW_ROOT $CHROOT_BIN/setsid $CHROOT_BIN/cttyhack $INIT_PROG
@@ -227,7 +227,7 @@ main_wrapper() {
         safe_shutdown poweroff ask
 
     else
-        vmsg 6  "$_Start_X_process_" $(pq /sbin/init)
+        vmsg 6  "Start %s process" $(pq /sbin/init)
         exec $LIVE_BIN/switch_root -c /dev/console $NEW_ROOT /sbin/init "$@"
     fi
 }
@@ -355,7 +355,7 @@ main_core() {
     if [ -n "$sbin_init" -a -z "${sbin_init##*systemd}" ]; then
         SYSTEM_D=true
         touch /live/config/systemd
-        msg  "$_Detected_systemd_init_system_"
+        msg  "$_Detected_X_init_system_" $(cq systemd)
     fi
 
     breakpoint 6 "after mounting aufs"
@@ -371,7 +371,7 @@ main_core() {
         PERSISTENCE="$PERSISTENCE,home"
 
     else
-        [ "$NEED_HOMEFS" ] && non_fatal  "$_Could_not_enable_required_X_persistence_" "$(pqh home!)"
+        [ "$NEED_HOMEFS" ] && non_fatal  "Could not enable required %s persistence" "$(pqh home!)"
     fi
 
     [ "$DO_XTRA"       ] && copy_xtra    $DEFAULT_DIR
@@ -735,7 +735,7 @@ list_modules() {
     cnt=$(echo $list | wc -w)
 
     #. loaded <count> modules(s)
-    vmsg 6  "$_Loaded_X_module_s_" $(nq $cnt)
+    vmsg 6  "Loaded %s module(s)" $(nq $cnt)
 
     [ "$list" ] && vmsg 7 "$white$list"
 
@@ -743,7 +743,7 @@ list_modules() {
     local ecnt=$(echo "$ERR_MODULES" | wc -w)
 
     #. <count> module(s) failed to load
-    vmsg 6  "$_X_module_s_failed_to_load_" $(nq $ecnt)
+    vmsg 6  "%s module(s) failed to load" $(nq $ecnt)
 
     vmsg 7 "$white$ERR_MODULES"
 
@@ -818,23 +818,23 @@ do_welcome() {
 
     [ -x /bin/ntfs-3g ] && vmsg 6 "$white  $(ntfs-3g --version 2>&1)"
 
-    vmsg 6 "%25s: $white%s"   "$_initrd_version_" "$version"
-    vmsg 6 "%25s: $white%s"   "$_initrd_built_"   "$v_date"
+    vmsg 6 "%25s: $white%s"  'initrd version' "$version"
+    vmsg 6 "%25s: $white%s"  'initrd built'   "$v_date"
 
     # Print meminfo.
     local mem_format="${m_co}%s: $num_co%5d${m_co} M"
-    vmsg 6 "$mem_format"   "$_Total_Memory_" $total_mem
-    # vmsg 6 "$mem_format"  "              Free Memory"  $FREE_MEM
-    vmsg 6 "$mem_format"   "$_Used_Memory_"  $used_mem
+    vmsg 6 "$mem_format"  '             Total Memory' $total_mem
+    # vmsg 6 "$mem_format"  '              Free Memory'  $FREE_MEM
+    vmsg 6 "$mem_format"  '              Used Memory'  $used_mem
 
     local cpu_format="%s:$white %s"
-    vmsg 6 "$cpu_format"   "$_Linux_kernel_" "$(uname -r)"
-    vmsg 6 "$cpu_format"   "$_Screen_width_" "$SCREEN_WIDTH"
-    vmsg 6 "$cpu_format"   "$_Kernel_arch_" "$(uname -m)"
+    vmsg 6 "$cpu_format"  '             Linux kernel' "$(uname -r)"
+    vmsg 6 "$cpu_format"  '             Screen width' "$SCREEN_WIDTH"
+    vmsg 6 "$cpu_format"  '              Kernel arch' "$(uname -m)"
 
-    # vmsg 6  "$cpu_format" "                      CPU" "$(cpu_param 'model name' unknown)"
-    # vmsg 6  "$cpu_format" "                    Cores" "$num_co$(cpu_param 'cpu cores'  1)"
-    # vmsg 6  "$cpu_format" "                    Cache" "$(cpu_param 'cache size' unknown)"
+    # vmsg 6  "$cpu_format" '                      CPU' "$(cpu_param 'model name' unknown)"
+    # vmsg 6  "$cpu_format" '                    Cores' "$num_co$(cpu_param 'cpu cores'  1)"
+    # vmsg 6  "$cpu_format" '                    Cache' "$(cpu_param 'cache size' unknown)"
 }
 
 show_bootcodes() {
@@ -863,7 +863,7 @@ show_integer_errors() {
     for param in $params; do
         name=${param%%=*}
         value=${param#*=}
-        warn  "$_Only_small_integer_values_are_allowed_for_X_Will_ignore_Y_" \
+        warn  "Only small integer values are allowed for %s.  Will ignore %s" \
             $(pqw $name) $(pqw $param)
     done
 }
@@ -945,14 +945,14 @@ load_kernel_modules() {
     for module in ${list//,/ }; do
         case $module in
             all) load_all_modules ;;
-              *) modprobe -q $module || warn   "$_Could_not_load_module_X_" $(pqw $module);;
+              *) modprobe -q $module || warn   "Could not load module %s" $(pqw $module);;
         esac
     done
 }
 
 load_all_modules() {
     local subdir=$1
-    msg  "$_Loading_all_live_modules_"
+    msg  "$_Loading_all_modules_"
     debug_cmd lsmod
     debug_cmd lspci
     LOAD_ALL_MODULES=true
@@ -1063,7 +1063,7 @@ from_filter() {
 
     #. Invalid <parameter-name> value(s) <bad values>
     [ "$invalid_scan" ] \
-        && _fatal "$(printf  "$_Invalid_X_values_s_Y_" "$(pqh from=)" "$(pqh $invalid_scan)")" \
+        && _fatal "$(printf  "Invalid %s values(s) %s" "$(pqh from=)" "$(pqh $invalid_scan)")" \
         "$(printf  "$_Valid_values_are_X_" "$(cq cd hd usb all)")"
 
     [ "$FILTERED_LIST" ]
@@ -1105,7 +1105,7 @@ find_files() {
     ret=$?
     t2=$(get_time)
     elapsed=$(get_seconds $((t2 - start_t)))
-    vmsg 6  "$_Spent_X_seconds_looking_for_Y_file_s_Z_" $(nq $elapsed) $(fq $find_type) "$(fq $files)"
+    vmsg 6  "Spent %s seconds looking for %s file(s) %s" $(nq $elapsed) $(fq $find_type) "$(fq $files)"
     [ "$loop_times" ] && vmsg 6 "loop times:$num_co$loop_times"
 
     [ "$find_type" != boot ] && return $ret
@@ -1245,7 +1245,7 @@ _find_files() {
             # Give up early if the root device is found but the partition is not
             # But wait a second in case there is a delay for the partitions to show
             if [ "$partition_error" ]; then
-                warn  "$_Found_root_device_X_but_not_partition_Y_" "$(pqw $root_device)" "$(pqw $partition)"
+                warn  "Found root device %s but not partition %s" "$(pqw $root_device)" "$(pqw $partition)"
                 sleep 1
                 final_try=true
             fi
@@ -1336,7 +1336,7 @@ _find_files() {
                     local model=$(cat /sys/block/${short_dev%%[0-9]*}/device/model 2>/dev/null)
 
                     #. <type> device model: <model-name>
-                    [ "$model" ] && vmsg 6  "$_X_device_model_Y_" $find_type "$(cq $model)"
+                    [ "$model" ] && vmsg 6  "%s device model: %s" $find_type "$(cq $model)"
 
                 else
                     rmdir $mp_orig
@@ -1419,7 +1419,7 @@ frugal_error() {
         [ -d $mp ] && rmdir $mp
     done
 
-    non_fatal  "$_Frugal_install_failed_or_was_teminated_"
+    non_fatal  "Frugal install failed (or was teminated)"
 
 }
 
@@ -1449,13 +1449,13 @@ find_frugal_file() {
         need_to_ask=true
 
         warn
-        warn  "$_Found_X_device_with_Y_" $(cqw frugal)  "$name $(cqw $value)"
-        warn  "$_But_did_not_find_file_X_on_the_device_" "$(cqw $sqfile)"
-        warn  "$_Will_start_normal_boot_to_do_frugal_install_"
+        warn  "Found %s device with %s" $(cqw frugal)  "$name $(cqw $value)"
+        warn  "But did not find file %s on the device" "$(cqw $sqfile)"
+        warn  "Will start normal boot to do frugal install"
         warn
 
     elif [ "$FORCE_FRUGAL" ]; then
-        msg  "$_Force_frugal_install_"
+        msg 'Force frugal install'
         if [ $ret -eq 0  ]; then
             device=$FOUND_DEV
             umount $FOUND_DEV
@@ -1463,8 +1463,8 @@ find_frugal_file() {
 
     else
         warn
-        warn  "$_Could_not_find_X_device_with_Y_" $(cqw frugal) "$name $(cqw $value)"
-        warn  "$_Will_start_normal_boot_to_do_frugal_install_"
+        warn  "Could not find %s device with %s" $(cqw frugal) "$name $(cqw $value)"
+        warn  "Will start normal boot to do frugal install"
         warn
     fi
 
@@ -1496,7 +1496,7 @@ find_frugal_file() {
 
         msg  "$_Looking_for_partitions_with_at_least_X_free_Please_wait_" "$(nq $(size_label_m $needed))"
 
-        select_device  "$_frugal_" device $needed not_mounted || return 2
+        select_device 'frugal' device $needed not_mounted || return 2
 
         local ret=$?
 
@@ -1506,12 +1506,12 @@ find_frugal_file() {
     fi
 
     if ! mkdir -p $FRUGAL_MP; then
-        err  "$_Could_not_make_frugal_directory_"
+        err  "Could not make frugal directory"
         return 10
     fi
 
     if ! try_mount $device $FRUGAL_MP rw; then
-        err  "$_Could_not_mount_frugal_device_X_" $(pqe $device)
+        err  "Could not mount frugal device %s" $(pqe $device)
         return 20
     fi
 
@@ -1531,7 +1531,7 @@ find_frugal_file() {
         vmsg 5 'Device %s has %s free' $(pq $device) "$(nq $(size_label_m $free))"
 
         if [ $free -lt $needed ]; then
-            err  "$_Not_enough_free_space_on_device_X_to_do_install_" $(pqe $device)
+            err  "Not enough free space on device %s to do install" $(pqe $device)
             return 20
         fi
 
@@ -1545,12 +1545,12 @@ find_frugal_file() {
         msg  "$_copy_X_to_Y_" $(pq $(size_label_m $actual)) $(pq $sqfile_dir/)
 
         if ! time_cmd copy_files $old_dir $sqfile_dir $FRUGAL_FILES; then
-            warn  "$_Copy_failed_Erasing_partial_copy_"
+            warn  "Copy failed.  Erasing partial copy"
             log_cmd rm -f $sqfile_full
             return 40
         fi
 
-        warn  "$_The_frugal_install_succeeded_"
+        warn  "The frugal install succeeded"
         DID_FRUGAL=true
     fi
 
@@ -1661,7 +1661,7 @@ mount_linuxfs() {
     local wrap_mp=${3:-$WRAP_FILE_MP}  vid_file=$1$VID_FILE
 
     mkdir -p $sqfs_mp
-    vmsg 6  "$_Mount_file_X_at_Y_" "$(fq $sqfile_full)" "$(fq $sqfs_mp)"
+    vmsg 6  "Mount file %s at %s" "$(fq $sqfile_full)" "$(fq $sqfs_mp)"
     #. Could not mount <file name> as a <type> filesystem
     log_cmd mount -t squashfs -o loop,ro $sqfile_full $sqfs_mp \
         || fatal  "$_Could_not_mount_X_as_a_Y_filesystem_" $sqfile_full squashfs
@@ -1682,7 +1682,7 @@ mount_linuxfs() {
     if [ "$SQFS_VID" ]; then
         vmsg 7 'sqfs_vid: %s' "$nc_co$SQFS_VID"
     else
-        vmsg 7  "$_No_X_found_at_Y_" "$VID_NAME" "$white$vid_file$m_co"
+        vmsg 7  "No %s found at %s" "$VID_NAME" "$white$vid_file$m_co"
     fi
     SQFS_VID_FILE=$vid_file
 }
@@ -1713,7 +1713,7 @@ mount_aufs() {
     fi
 
     # Do the actual aufs mount
-    vmsg 6  "$_Mount_X_at_Y_" 'aufs' "$(fq $aufs_mp)"
+    vmsg 6  "Mount %s at %s" 'aufs' "$(fq $aufs_mp)"
 
     log_cmd mount -t aufs -o "br:$aufs_arg" $aufs_mp $aufs_mp \
         || fatal  "$_Could_not_mount_X_" aufs
@@ -1784,7 +1784,7 @@ try_file_mount() {
 mount_tmpfs() {
     local mp=$1  size=$2  name=$3  opts=${4+,}$4
     mkdir -p $mp
-    vmsg 6  "$_Create_X_at_Y_" "${hi_co}$name tmpfs${m_co}" "$(fq $mp) (${num_co}$size ${m_co}MB)"
+    vmsg 6  "Create %s at %s" "${hi_co}$name tmpfs${m_co}" "$(fq $mp) (${num_co}$size ${m_co}MB)"
     log_cmd $LIVE_BIN/mount -t tmpfs -o size=${size}m$opts tmpfs $mp || return 1
     return 0
 }
@@ -1839,7 +1839,7 @@ should_fsck() {
 
     local days=$((SB_CHECKINTERVAL /60/60/24))
 
-    vmsg 7  "$_precheck_filesystem_on_X_"                     $(dq $dev)
+    vmsg 7  "precheck filesystem on %s"                     $(dq $dev)
     if [ "$DB_PLUS" ]; then
         vmsg 9 "${green}         Device:$white %s"             $dev
         vmsg 9 "${green}    Mount count:$white %s"             $SB_MOUNT_CNT
@@ -1852,14 +1852,14 @@ should_fsck() {
     [ "$FORCE_FSCK" ] && return 0
 
     if [ $SB_STATE != 1 ]; then
-        warn  "$_X_device_Y_not_cleanly_unmounted_Check_forced_" "$(pqw $name)" $(pqw $sdev)
+        warn  "%s device %s not cleanly unmounted.  Check forced." "$(pqw $name)" $(pqw $sdev)
         return 0
     fi
 
     [ "$SB_MAX_MOUNT_CNT" != 65535 ] && max_count=$SB_MAX_MOUNT_CNT
 
     if [ $SB_MOUNT_CNT -ge $max_count ]; then
-        warn  "$_X_device_Y_has_not_been_checked_in_Z_mounts_Check_forced_" \
+        warn  "%s device %s has not been checked in %s mounts.  Check forced." \
             "$(pqw $name)" $sdev "$(nq $SB_MOUNT_CNT)"
         return 0
     fi
@@ -1868,7 +1868,7 @@ should_fsck() {
 
     [ $((SB_LASTCHECK + SB_CHECKINTERVAL)) -ge $(date +%s) ] || return 1
 
-    warn  "$_X_device_Y_has_not_been_checked_in_Z_days_Check_forced_" \
+    warn  "%s device %s has not been checked in %s days.  Check forced." \
         $(pqw $name) $(pqw $sdev) "$(nqw $days)"
     return 1
     return 0
@@ -1987,9 +1987,9 @@ breakpoint() {
     if ! should_break_at $bp; then
 
         if [ "$TEST_ERRORS" ]; then
-            msg  "$_normal_message_one_"
-            echo  "$_test_error_" >&2
-            msg  "$_normal_message_two_"
+            msg 'normal message one'
+            echo 'test error' >&2
+            msg 'normal message two'
         fi
 
         return
@@ -2125,7 +2125,7 @@ time_cmd() {
     local secs=$(get_seconds $((t1 - t0)))
     kill -9 $pid
     echo
-    vmsg 6  "$_command_X_took_Y_seconds_" "$(pq $*)" "$(nq $secs)"
+    vmsg 6  "command %s took %s seconds" "$(pq $*)" "$(nq $secs)"
     return $ret
 }
 
@@ -2258,7 +2258,7 @@ final_umount() {
         done
     done
     list=$(mountpoint_list) || return 0
-    err  "$_Unable_to_unmount_X_" "$(pq $list)"
+    err  "Unable to unmount %s" "$(pq $list)"
     return 1
 }
 
@@ -2543,7 +2543,7 @@ Blkid
     if [ $cnt -le 1 ]; then
         display="$header\n$display"
         msg_nc "$display"
-        warn  "$_No_suitable_devices_were_found_"
+        warn  "No suitable devices were found."
         return 1
     fi
 
@@ -2577,10 +2577,10 @@ label_device() {
             btrfs) pre="btrfs filesystem label $dev" ; post=""       ;;
          reiserfs) pre="reiserfstune --label"        ; post="$dev"   ;;
 
-               "") warn  "$_Could_not_determine_filesystem_on_X_" $(pqw $dev)
+               "") warn  "Could not determine filesystem on %s" $(pqw $dev)
                    return 1                                          ;;
 
-                *) warn  "$_Cannot_label_a_X_filesystem_" $(pqw $type)
+                *) warn  "Cannot label a %s filesystem" $(pqw $type)
                    return 2                                          ;;
     esac
 
@@ -2588,7 +2588,7 @@ label_device() {
     local full=$(ld_path_which $cmd)
 
     if [ -z "$full" ]; then
-        warn  "$_Dont_have_the_X_tool_to_label_a_Y_filesystem_" $(pqw $cmd) $(pqw $type)
+        warn  "Don't have the %s tool to label a %s filesystem" $(pqw $cmd) $(pqw $type)
         return 3
     fi
 
@@ -2655,7 +2655,7 @@ label_error() {
     ##warn "$hbar"
     warn
     err  "$_Fatal_Error_"
-    err  "$_No_device_with_X_was_found_" "$name $(cqe $value)"
+    err  "No device with %s was found" "$name $(cqe $value)"
 
     vmsg_nc 3  "$_Valid_X_" "${name}s:"
     local val
@@ -2862,7 +2862,7 @@ check_vid() {
         vid_error  "$_No_X_found_but_there_is_a_Y_" "$LINUXFS_NAME $VID_NAME" "rootfs $VID_NAME"
         return 1
     else
-        vmsg 6  "$_No_X_or_Y_found_" "$LINUXFS_NAME $VID_NAME" "rootfs $VID_NAME"
+        vmsg 6  "No %s or %s found" "$LINUXFS_NAME $VID_NAME" "rootfs $VID_NAME"
         return 0
     fi
 }
@@ -2879,8 +2879,8 @@ check_md5()
     dir=$(echo $dir | sed 's|/$||')
     if ! [ -d "$dir" ]; then
         msg $tbar
-        err  "$_Directory_X_does_not_exist_" "$(fqe $1)"
-        err  "$_Cant_perform_X_check_" md5
+        err  "Directory %s does not exist" "$(fqe $1)"
+        err  "Can't perform %s check" md5
         msg $tbar
         return 0
     fi
@@ -2916,15 +2916,15 @@ check_md5()
             error=true
         fi
 
-        vmsg 6  "$_wanted_X_" "$num_co$true_md5"
-        vmsg 6  "$_got_X_" "$num_co$file_md5"
+        vmsg 6  "         wanted: %s" "$num_co$true_md5"
+        vmsg 6  "            got: %s" "$num_co$file_md5"
     done
 
     vmsg 1
     if [ "$fcnt" = 0 ]; then
-        err  "$_No_md5_checksums_were_found_in_X_Cant_do_any_md5_checks_" "$(fqe $dir)"
+        err  "No md5 checksums were found in %s. Can't do any md5 checks." "$(fqe $dir)"
     elif [ "$error" ]; then
-        non_fatal  "$_At_least_one_md5_checksum_did_not_match_"
+        non_fatal  "At least one md5 checksum did not match"
     elif [ "$fcnt" = 1 ]; then
         vmsg 1  "$_Success_The_file_passed_"
     else
@@ -2992,14 +2992,14 @@ do_remaster() {
         heading 'remaster %s' "$(cq rollback)"
 
         if ! [ -f "$old_file" ]; then
-            err -n  "$_The_boot_parameter_X_was_given_but_no_Y_was_found_" \
+            err -n  "The boot parameter %s was given but no %s was found" \
                 "$(cqe rollback)" "$(fqe $SQFILE_NAME.old)"
 
             do_delay 10  "$_Wait_X_seconds_" "${num_co}10$m_co"
             return 1
         fi
         msg $tbar
-        warn  "$_Roll_back_file_X_to_Y_" "$SQFILE_NAME.old" "$SQFILE_NAME"
+        warn  "Roll back file %s to %s" "$SQFILE_NAME.old" "$SQFILE_NAME"
         msg $tbar
 
         local file full
@@ -3023,19 +3023,19 @@ do_remaster() {
 
     if [ -e $old_file -o -e $bad_file ]; then
         warn  "$m_co$tbar"
-        warn   "$_Will_not_remaster_"
-        warn   "$_In_directory_X_one_or_more_of_these_files_already_exist_"  "$sqfile_path"
+        warn   "Will not remaster"
+        warn   "In directory %s one or more of these files already exist"  "$sqfile_path"
         warn  "    $SQFILE_NAME.old"
         warn  "    $SQFILE_NAME.bad"
         warn
-        warn   "$_Run_the_X_program_to_fix_this_problem_" 'remaster-live'
+        warn   "Run the %s program to fix this problem" 'remaster-live'
         warn  "$m_co$tbar"
 
         non_fatal
         return 2
     fi
     msg $tbar
-    warn  "$_Remaster_the_file_X_to_Y_" "$SQFILE_NAME.new" "$SQFILE_NAME"
+    warn  "Remaster the file %s to %s" "$SQFILE_NAME.new" "$SQFILE_NAME"
     msg $tbar
 
     local file full
@@ -3096,7 +3096,7 @@ _copy_to_ram() {
         sq_size_k=$((sq_size_k + size_k))
         vmsg 8 "$format" $extra $size_k
         #. Total [RAM needed]
-        vmsg 8 "$format2"  "$_Total_"  $sq_size_k
+        vmsg 8 "$format2"  "          Total"  $sq_size_k
     done
 
     # Extra space here does not waste ram
@@ -3105,14 +3105,14 @@ _copy_to_ram() {
     local ram_needed=$((sq_size_m + MIN_SYS_RAM));
 
     if [ "$sq_size_m" -gt "$FREE_MEM" ]; then
-        err  "$_Not_enough_RAM_available_to_do_X_" $err_toram
+        err  "Not enough RAM available to do %s" $err_toram
         #. Have <size> RAM, needed <size>
-        err  "$_have_X_RAM_needed_Y_" "${num_co}$FREE_MEM ${m_co}M${err_co}" \
+        err  "have %s RAM, needed %s" "${num_co}$FREE_MEM ${m_co}M${err_co}" \
             "${num_co}$sq_size_m ${m_co}M"
         return 1
     fi
     if ! mount_tmpfs $toram_mp $sq_size_m toram; then
-        err  "$_Unable_to_mount_X_Will_not_do_Y_" tmpfs $err_toram
+        err  "Unable to mount %s.  Will not do %s" tmpfs $err_toram
         return 2
     fi
 
@@ -3131,12 +3131,12 @@ _copy_to_ram() {
     [ -e $from ] && cp $from.md5 $dest
 
     if ! cp_file $orig $name $dest 2>&1; then
-        err  "$_Copy_failed_Cannot_do_X_" $err_toram
+        err  "Copy failed.  Cannot do %s" $err_toram
         return 3
     fi
 
     if ! [ -f "$dest/$name" ]; then
-        err  "$_The_destination_file_is_missing_The_X_has_failed_" $err_toram
+        err  "The destination file is missing. The %s has failed." $err_toram
         return 4
     fi
 
@@ -3145,7 +3145,7 @@ _copy_to_ram() {
     local dest_bytes=$(stat -c "%s" $dest/$name)
 
     if [ "$orig_bytes" -ne "$dest_bytes" ]; then
-        err  "$_Copy_was_incomplete_The_X_failed_" $err_toram
+        err  "Copy was incomplete. The %s failed" $err_toram
         format="%s: ${num_co}%12d${m_co} bytes"
         vmsg 1  "$_Size_of_original_X_" $orig_bytes
         vmsg 1  "$_Size_of_copy_X_" $dest_bytes
@@ -3223,8 +3223,8 @@ prepare_persistence() {
             *)
                 # FIXME: should this be an non-fatal error?
                 warn
-                warn  "$_Invalid_X_values_s_Y_"  $(cqw persist) "$(cqw $param)"
-                warn  "$_Valid_values_X_" "$(cqw auto home home! root root! static usb hd a h h! r r! s)" ;;
+                warn  "Invalid %s values(s) %s"  $(cqw persist) "$(cqw $param)"
+                warn  "Valid values: %s" "$(cqw auto home home! root root! static usb hd a h h! r r! s)" ;;
         esac
 
         # And if you try sometime ...
@@ -3245,8 +3245,8 @@ prepare_persistence() {
 
     AUTO_PERSIST="$DISTRO_NAME-Persist"
     warn
-    warn  "$_Persistence_was_requested_on_a_read_only_boot_device_"
-    warn  "$_Will_search_for_a_persistence_device_with_the_label_X_" "$(pqw $AUTO_PERSIST)"
+    warn  "Persistence was requested on a read-only boot device"
+    warn  "Will search for a persistence device with the label %s" "$(pqw $AUTO_PERSIST)"
     warn
     PERSIST_ID=label="$AUTO_PERSIST"
 
@@ -3262,7 +3262,7 @@ mount_persist_device() {
 
         case $(stat -c %t $SQFILE_DEV) in
          [38]) ;;
-            *) warn  "$_Cant_use_X_as_a_persistence_device_" $(pqw $SQFILE_DEV)
+            *) warn  "Can't use %s as a persistence device" $(pqw $SQFILE_DEV)
                return 20 ;;
         esac
         : ${PERSIST_ID:=name=$SQFILE_DEV}
@@ -3283,7 +3283,7 @@ mount_persist_device() {
             find_files persist "$persist_files" "$PERSIST_MP" "$PERSIST_ID" "$PERSIST_RETRY"
             ret=$?
         else
-            warn  "$_Disable_persistence_"
+            warn  "Disable persistence"
             unset WANT_ROOTFS WANT_HOMEFS NEED_ROOTFS NEED_HOMEFS
             return
         fi
@@ -3303,13 +3303,13 @@ mount_persist_device() {
     else
 
         case $ret in
-           40) warn  "$_Could_not_find_any_persistence_files_"  ;;
-            *) warn  "$_Could_not_find_persistence_device_"     ;;
+           40) warn  "Could not find any persistence files"  ;;
+            *) warn  "Could not find persistence device"     ;;
         esac
 
         #. Could not enable required <type> persistence
-        [ "$NEED_ROOTFS" ] && non_fatal  "$_Could_not_enable_required_X_persistence_" $(pqh 'root!')
-        [ "$NEED_HOMEFS" ] && non_fatal  "$_Could_not_enable_required_X_persistence_" $(pqh 'home!')
+        [ "$NEED_ROOTFS" ] && non_fatal  "Could not enable required %s persistence" $(pqh 'root!')
+        [ "$NEED_HOMEFS" ] && non_fatal  "Could not enable required %s persistence" $(pqh 'home!')
 
         unset WANT_ROOTFS WANT_HOMEFS NEED_ROOTFS NEED_HOMEFS
     fi
@@ -3349,7 +3349,7 @@ persist_makefs() {
     local type=$1
     _persist_makefs "$@" && return
 
-    warn  "$_Disable_X_persistence_" $(pqw $type)
+    warn  "Disable %s persistence" $(pqw $type)
 }
 
 _persist_makefs() {
@@ -3360,7 +3360,7 @@ _persist_makefs() {
     [ -e $full_file ] && return 0
 
     warn
-    warn  "$_X_persistence_was_requested_but_no_Y_file_was_found_" $(pqw $type) $(pqw $file)
+    warn  "%s persistence was requested but no %s file was found" $(pqw $type) $(pqw $file)
     warn
 
     eval local needed=\$$needed_var wanted=\$$wanted_var
@@ -3373,7 +3373,7 @@ _persist_makefs() {
     vmsg 6 ' Available space: %s Meg' $(nq $avail)
 
     [ "$orig_def_size" ] && [ $orig_def_size -gt $avail ] \
-        && warn  "$_Not_enough_room_on_Live_device_to_create_X_file_of_size_Y_Meg_" \
+        && warn  "Not enough room on Live device to create %s file of size %s Meg" \
             $(fq $file) $(nq $orig_def_size)
 
     local base_file=${file%%.*}
@@ -3414,9 +3414,9 @@ _persist_makefs() {
 
     if [ -z "$sizes" -o "$default_size" = -1 ]; then
         if [ "$needed" ]; then
-            non_fatal  "$_Not_enough_space_on_device_to_create_X_file_" "$(pqh $file)"
+            non_fatal  "Not enough space on device to create %s file" "$(pqh $file)"
         else
-            warn  "$_Not_enough_space_on_device_to_create_X_file_" "$(pqw $file)"
+            warn  "Not enough space on device to create %s file" "$(pqw $file)"
         fi
         return 1
     fi
@@ -3431,7 +3431,7 @@ _persist_makefs() {
     heading  "$_create_X_persistence_file_" "$(fq $file)"
     vmsg 1  "$_Default_size_X_Meg_Filesystem_type_Y_" $(nq $default_size) $(pq ext4)
     vmsg 1  "$_This_default_size_will_leave_X_Meg_free_" $(nq $((avail - default_size)))
-    [ "$vfat" ] &&  warn  "$_Warning_this_can_take_several_minutes_per_Gig_on_a_X_file_system_" $(pqw $par_fstype)
+    [ "$vfat" ] &&  warn  "Warning: this can take several minutes per Gig on a %s file system" $(pqw $par_fstype)
 
     if [ "$AUTO_MAKE_FS" ]; then
         auto_mode=true
@@ -3472,9 +3472,9 @@ _persist_makefs() {
 
     breakpoint m "before makefs"
 
-    [ "$vfat" ] &&  warn  "$_Warning_this_can_take_several_minutes_per_Gig_on_a_X_file_system_" $(pqw $par_fstype)
+    [ "$vfat" ] &&  warn  "Warning: this can take several minutes per Gig on a %s file system" $(pqw $par_fstype)
     if ! time_cmd makefs $full_file $fs_type $fs_size; then
-        err  "$_Failed_to_create_filesystem_Deleting_X_file_" $(pqe $file)
+        err  "Failed to create filesystem.  Deleting %s file" $(pqe $file)
         rm -f $full_file
         return 3
     fi
@@ -3510,7 +3510,7 @@ default_makefs_size() {
 select_persist_device() {
     local device label=$1
     warn
-    warn  "$_Could_not_find_a_partition_with_label_X_" "$(pqw $label)"
+    warn  "Could not find a partition with label %s" "$(pqw $label)"
     warn
     msg  "$_Please_wait_while_existing_parititions_are_found_"
 
@@ -3540,14 +3540,14 @@ _fsck_persist_dev() {
     should_fsck $dev persist || return 0
 
     if ! umount $mp &> /dev/null; then
-        vmsg 6  "$_Not_checking_persist_filesystem_because_it_cant_be_unmounted_"
+        vmsg 6  "Not checking persist filesystem because it can't be unmounted"
         return 0
     fi
 
     do_fsck  "$_persist_device_" $dev -p
     try_mount $dev $mp && return 0
 
-    non_fatal  "$_Could_not_remount_the_persistence_device_"
+    non_fatal  "Could not remount the persistence device"
     return 1
 }
 
@@ -3565,7 +3565,7 @@ mount_and_copy_rootfs() {
     else
 
         STATIC_ROOT=
-        [ "$NEED_ROOTFS" ] && non_fatal  "$_Could_not_enable_required_X_persistence_" "$(pqh root!)"
+        [ "$NEED_ROOTFS" ] && non_fatal  "Could not enable required %s persistence" "$(pqh root!)"
     fi
 }
 
@@ -3584,7 +3584,7 @@ _mount_and_copy_rootfs() {
 
 copy_persist_to_ram() {
 
-    vmsg 6  "$_Put_persistent_root_in_RAM_from_X_"  "$ROOTFS_MP"
+    vmsg 6  "Put persistent root in RAM (from %s)"  "$ROOTFS_MP"
 
     local persist_used_k=$(du -sk $ROOTFS_MP | awk '{print $1}')
     local persist_used=$((persist_used_k / 1024))
@@ -3594,14 +3594,14 @@ copy_persist_to_ram() {
 
     if [ "$persist_used" -ge "$AUFS_RAM_SIZE" ]; then
         vmsg_nc 3 $tbar
-        err   "$_Not_enough_RAM_to_hold_persistent_root_"
-        warn  "$_You_need_to_X_or_use_Y_persistence_" remaster-live "$(cq static root)"
+        err   "Not enough RAM to hold persistent root"
+        warn  "You need to %s or use %s persistence" remaster-live "$(cq static root)"
         vmsg_nc 3 $tbar
         return 1
     fi
     vmsg 5  "$_Copy_X_Megabytes_to_RAM_" "${num_co}$persist_used${m_co}"
     if ! cp_dir $ROOTFS_MP $AUFS_RAM_MP 2>&1; then
-         err  "$_Copy_persistent_root_to_RAM_failed_Will_erase_partial_copy_"
+         err  "Copy persistent root to RAM failed!  Will erase partial copy ..."
          rm -rf $AUFS_RAM_MP/*
          return 2
      fi
@@ -3609,7 +3609,7 @@ copy_persist_to_ram() {
     #. AUFS uses [this much RAM]
     vmsg 7 "$format" '                     AUFS uses' $ram_used
     vmsg 7 "$format" '              Persistence uses' $persist_used
-    vmsg 6 "${hi_co}%s"  "$_Copy_persistent_root_to_RAM_succeeded_"
+    vmsg 6 "${hi_co}%s"  "Copy persistent root to RAM succeeded"
 
     DF_ROOTFS="$(df -P -m $ROOTFS_MP | tail -n 1)"
     log_cmd umount $ROOTFS_MP
@@ -3625,7 +3625,7 @@ mount_persist_file() {
     local full=$(readlink -f $PERSIST_FULL_PATH/$file)
 
     if ! [ -f "$full" ]; then
-        [ "$need" ] && err  "$_Could_not_find_file_X_for_required_Y_persistence_" \
+        [ "$need" ] && err  "Could not find file %s for required %s persistence" \
             "$(pqh $file)" "$type"
         return 3
     fi
@@ -3639,8 +3639,8 @@ mount_persist_file() {
     mkdir -p $mpnt
     if ! try_file_mount $full $mpnt; then
         #. Could not mount file <filename> for <type> persistence
-        err  "$_Could_not_mount_file_X_for_Y_persistence_" "$full" "$type"
-        err  "$_Did_not_enable_X_persistence_" "$type"
+        err  "Could not mount file %s for %s persistence" "$full" "$type"
+        err  "Did not enable %s persistence" "$type"
         return 4
     fi
 
@@ -3660,7 +3660,7 @@ remaster_rootfs() {
 
     if [ "$DID_REMASTER" -o "$DID_ROLLBACK" ]; then
         if [ "$path" = "$BOOT_MP/$SQFILE_PATH" ]; then
-            vmsg 6  "$_Will_not_remaster_X_twice_" rootfs
+            vmsg 6  "Will not remaster %s twice" rootfs
             return
         fi
     fi
@@ -3686,7 +3686,7 @@ update_gfx_menu() {
     heading 'GFX Boot Menu Update'
 
     if ! [ -x "$script" ]; then
-        err  "$_Could_not_find_script_X_" "$script"
+        err  "Could not find script %s" "$script"
         return
     fi
 
@@ -3698,7 +3698,7 @@ update_gfx_menu() {
             cp -r $dir/* $tdir
             dir=$tdir
         else
-            err  "$_Cant_update_X_on_read_only_boot_media_" "$(pqe gfx boot)"
+            err  "Can't update %s on read-only boot media" "$(pqe gfx boot)"
             return
         fi
     fi
@@ -3733,21 +3733,21 @@ _copy_homefs() {
     log_cmd mkdir -p $cur_home_mp $new_home_mp
 
     if ! log_cmd mount -o loop $homefs $cur_home_mp; then
-        err  "$_Could_not_mount_X_for_copy_" homefs
+        err  "Could not mount %s for copy" homefs
         return 1
     fi
 
     if ! log_cmd mount -o loop $homefs.new $new_home_mp; then
-        err  "$_Could_not_mount_X_for_copy_" homefs.new
+        err  "Could not mount %s for copy" homefs.new
         return 1
     fi
 
     local need_meg=$(used_space $cur_home_mp)
     local have_meg=$(all_space $new_home_mp)
     need_meg=$((need_meg + 10))
-    vmsg 6  "$_Have_X_Megabytes_free_Need_Y_" "$num_co $have_meg$m_co" "$num_co$need_meg$m_co"
+    vmsg 6  "Have %s Megabytes free.  Need %s" "$num_co $have_meg$m_co" "$num_co$need_meg$m_co"
     if [ "$need_meg" -gt "$have_meg" ]; then
-        err  "$_Not_enough_room_to_copy_home_filesystem_"
+        err  "Not enough room to copy home filesystem"
         return 1
     fi
 
@@ -3763,7 +3763,7 @@ _copy_homefs() {
     breakpoint r "After resize homefs rsync"
 
     if [ "$ret" -ne 0 ]; then
-        err  "$_The_X_program_failed_Will_not_resize_Y_" $(pqe rsync) $(pqe homefs)
+        err  "The %s program failed.  Will not resize %s" $(pqe rsync) $(pqe homefs)
         return 1
     fi
 
@@ -3811,9 +3811,9 @@ fancy_prompt() {
     [ -r $dir/$fp_prog -a -n "$prompt" ] || return
 
     if grep -q $cmd $bashrc; then
-        db_msg "fancy prompts were already enabled"
+        db_msg 'fancy prompts were already enabled'
     else
-        db_msg "Enable fancy prompts"
+        db_msg 'Enable fancy prompts'
         echo "[ -r $fp_prog ] && source $fp_prog" >> $bashrc
         echo "[ -n \"\$(alias $cmd)\" ] && $prompt" >> $bashrc
     fi
@@ -3829,7 +3829,7 @@ copy_xtra() {
     local dir bdir=$1 xtra_dir=$1/xtra tarball=$1/xtra.tgz
 
     if [ -e $tarball ]; then
-        msg  "$_Unpack_xtra_tarball_"
+        msg 'Unpack xtra tarball'
         gunzip -c $tarball | tar x -C $NEW_ROOT/
     fi
 
@@ -3846,7 +3846,7 @@ copy_xtra() {
     msg
     local dfile=$bdir/delete.list
     test -e $dfile || return
-    msg  "$_Deleting_files_listed_in_X_" $(pq $dfile)
+    msg 'Deleting files listed in %s' $(pq $dfile)
     grep -v "^\s*#" $dfile | sed "s=^\s*/=$NEW_ROOT/=" | grep "/[a-z]" >> $MY_LOG
     rm -rf $(grep -v "^\s*#" $dfile | sed "s=^\s*/=$NEW_ROOT/=" | grep "/[a-z]")
 }
@@ -3933,7 +3933,7 @@ chroot_umount() {
         done
     done
     list=$(mountpoints_under $dir) || return 0
-    err  "$_Unable_to_unmount_X_" "$(hq $list)"
+    err  "Unable to unmount %s" "$(hq $list)"
     return 1
 }
 
