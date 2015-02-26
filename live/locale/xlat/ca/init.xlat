@@ -1,6 +1,5 @@
 _All_block_devices_X_="Tots els dispositius de blocs: %s "
 _Begin_="Comença "
-_Check_md5_of_files_in_X_directory_Please_be_patient_="Comprovant el md5 dels fitxers al directori %s. Si us plau, tingueu paciència..."
 _Copy_X_Megabytes_to_RAM_="Copiant %s MB a la RAM..."
 _Copy_X_to_empty_Y_="Copia %s al %s buit "
 _Copy_to_RAM_succeeded_="Copiat a RAM amb èxit"

@@ -1,6 +1,5 @@
 _All_block_devices_X_="Tutti i block devices: %s"
 _Begin_="Inizia"
-_Check_md5_of_files_in_X_directory_Please_be_patient_="Controllo dell'md5 dei file nella directory %s. Sii paziente, per favore..."
 _Copy_X_Megabytes_to_RAM_="Copia di %s megabyte nella RAM..."
 _Copy_X_to_empty_Y_="Copia %s su %s vuoto"
 _Copy_to_RAM_succeeded_="Copia sulla RAM effettuata con successo"

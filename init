@@ -96,6 +96,8 @@ MKFS_FREE_MARGIN=20
 
       LAST_BP_TIME=0
 
+   GFX_SAVE_SCRIPT="/bin/gfxsave.sh"
+
 set_live_dirs() {
     local dir=$1
 
@@ -113,7 +115,6 @@ set_live_dirs() {
         OUTPUT_DIR="$dir/config"
         LOCALE_DIR="$dir/locale"
         CUSTOM_DIR="$dir/custom"
-   GFX_SAVE_SCRIPT="$dir/bin/gfxsave.sh"
  DISABLED_USB_FILE="$OUTPUT_DIR/usb-disabled"
 }
 
@@ -451,7 +452,8 @@ read_cmdline_params()
         value=${param#*=}
 
         case $param in
-                          menus) DO_MENUS=true                                   ;;
+                          menus) DO_MENUS=ltopd                                  ;;
+                        menus=*) DO_MENUS=$DO_MENUS$value                        ;;
                        old-conf) NO_NEW_OUTPUT=true                              ;;
                        new-conf) NO_OLD_OUTPUT=true                              ;;
                          splash) SPLASH_PARAM=v                                  ;;
@@ -1436,7 +1438,8 @@ find_frugal_file() {
     local ret=$?
 
     if [ $ret -eq 0  -a -z "$FORCE_FRUGAL" ]; then
-        msg  "$_Found_existing_frugal_install_"
+        #. Found existing <frugal> install
+        msg  "$_Found_existing_X_install_" frugal
         SQFILE_MP=$BOOT_MP
         SQFILE_DEV=$FOUND_DEV
 
@@ -1527,7 +1530,7 @@ find_frugal_file() {
     breakpoint f "in frugal install"
 
     if [ -e $sqfile_full ]; then
-        msg  "$_Found_existing_frugal_install_"
+        msg  "$_Found_existing_X_install_" frugal
     else
 
         local free=$(free_space $FRUGAL_MP)
@@ -1540,10 +1543,12 @@ find_frugal_file() {
         fi
 
         if [ "$need_to_ask" ]; then
-            YES_no  "$_Do_you_want_to_do_a_frugal_on_the_X_device_" $(pq $device) || return 2
+            #. Do you want to do a <frugal>  install on the <name> device?
+            YES_no  "$_Do_you_want_to_do_a_X_install_on_the_Y_device_" frugal $(pq $device) || return 2
         fi
 
-        heading  "$_Frugal_install_please_be_patient_"
+        #. Doing <frugal> install, please be patient ...
+        heading  "$_Doing_X_install_please_be_patient_" frugal
         log_cmd mkdir -p $sqfile_dir || return 30
 
         msg  "$_copy_X_to_Y_" $(pq $(size_label_m $actual)) $(pq $sqfile_dir/)
@@ -1553,8 +1558,8 @@ find_frugal_file() {
             log_cmd rm -f $sqfile_full
             return 40
         fi
-
-        warn  "The frugal install succeeded"
+        #. The <frugal> install succeeded
+        warn  "$_The_install_succeeded_" frugal
         DID_FRUGAL=true
     fi
 
@@ -2369,8 +2374,13 @@ my_select_2() {
 }
 
 my_select_menu() {
-    local dir=$BOOT_MENU_DIR
-    local title=$1 blurb=$2 default=$3 name=$4 dfile=$dir/$4.data mfile=$dir/$4.menu
+    local dir=$BOOT_MENU_DIR menu=$DO_MENUS
+    [ "$menu" ] || return
+
+    local title=$1 blurb=$2 cheat=$3  name=$4 dfile=$dir/$4.data mfile=$dir/$4.menu default=${5:-0}
+
+    [ -z "${menu##*$cheat*}" ] || return
+
     if [ ! -e $dfile -o  ! -e $mfile ]; then
         [ "$BOOT_MENU_WARN" ] && warn "Missing $dfile or $mfile"
         return
@@ -2394,12 +2404,12 @@ do_menus() {
     local BOOT_MENU_WARN=true
     local lang time_zone option persist desktop
     local cmdline
-    my_select_menu 'Select Language' 'Languages are listed alphabetically'          0 lang
+    my_select_menu 'Select Language' 'Languages are listed alphabetically'          l lang
     [ "$lang" ] && read_xlat init ${lang##*=}
     msg "lang: ${lang##*=}"
-    my_select_menu  "$_Select_Timezone_"            "$_Timezone_are_listed_geographically_" 0 timezone
-    my_select_menu  "$_Select_Option_"              "$_Only_one_option_can_be_selected_"    0 options
-    my_select_menu  "$_Select_Persistence_Option_" ""                                   0 persist
+    my_select_menu  "$_Select_Timezone_"            "$_Timezone_are_listed_geographically_" t timezone
+    my_select_menu  "$_Select_Option_"              "$_Only_one_option_can_be_selected_"    o options
+    my_select_menu  "$_Select_Persistence_Option_" ""                                   p persist
     vmsg 6 "cmdline:$white $cmdline"
     echo "$cmdline" > /live/config/cmdline
     read_cmdline_params "$cmdline"
@@ -2410,7 +2420,7 @@ do_late_menus() {
     local BOOT_MENU_WARN=
     local lang time_zone option persist desktop
     local cmdline
-    my_select_menu  "$_Select_Desktop_" "" 0 desktop
+    my_select_menu  "$_Select_Desktop_" "" d desktop
     vmsg 6 "cmdline:$white $cmdline"
     echo "$cmdline" >> /live/config/cmdline
 }
@@ -2903,7 +2913,8 @@ check_md5()
     local fcnt=0
 
     vmsg 2 $tbar
-    vmsg_nc 1  "$_Check_md5_of_files_in_X_directory_Please_be_patient_" "$(fq $dir)"
+    #. Check <md5> of files in <some> directory
+    vmsg_nc 1  "$_Check_X_of_files_in_Y_directory_Please_be_patient_" md5 "$(fq $dir)"
 
     local file fname md5_file file_md5 true_md5 error
     for fname in $(ls $dir); do
@@ -2937,9 +2948,10 @@ check_md5()
 
     vmsg 1
     if [ "$fcnt" = 0 ]; then
-        err  "No md5 checksums were found in %s. Can't do any md5 checks." "$(fqe $dir)"
+        #. No <md5> checksums were found in <directory>.  Can't do any <md5> checks.
+        err  "$_No_X_checksums_were_found_in_Y_Cant_do_any_Z_checks_" md5 "$(fqe $dir)" md5
     elif [ "$error" ]; then
-        non_fatal  "At least one md5 checksum did not match"
+        non_fatal  "$_At_least_one_X_checksum_did_not_match_" md5
     elif [ "$fcnt" = 1 ]; then
         vmsg 1  "$_Success_The_file_passed_"
     else

@@ -1,6 +1,5 @@
 _All_block_devices_X_="    Alla blockenheter: %s"
 _Begin_="Börja"
-_Check_md5_of_files_in_X_directory_Please_be_patient_="Kontollera md5 på filerna i %s katalog. Var vänlig visa tålamod..."
 _Copy_X_Megabytes_to_RAM_="Kopiera %s Megabyte till RAM ..."
 _Copy_X_to_empty_Y_="Kopiera %s till tom %s"
 _Copy_to_RAM_succeeded_="Kopiering till RAM lyckades"

@@ -1,6 +1,5 @@
 _All_block_devices_X_="Todos los medios de bloque: %s"
 _Begin_="Empezar"
-_Check_md5_of_files_in_X_directory_Please_be_patient_="Revisando la md5 de los archivos en el directorio %s . Sea paciente por favor ..."
 _Copy_X_Megabytes_to_RAM_="Copiar %s Megabytes a RAM ..."
 _Copy_X_to_empty_Y_="Copiar %s al %s vacío"
 _Copy_to_RAM_succeeded_="La copia a RAM se realizó exitosamente"
