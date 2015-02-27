@@ -1,5 +1,8 @@
+_Copy_to_RAM_succeeded_="Kopieren des RAM gelungen"
 _Could_not_mount_X_="%s konnte nicht eingebunden werden"
+_Could_not_mount_X_as_a_Y_file_="Konnte nicht einhängen %s als %s Datei"
 _Fatal_Error_="Schwerwiegender Fehler"
+_Non_Fatal_Error_="Kein schwerwiegender Fehler"
 _Please_try_again_="Bitte versuchen Sie es erneut"
 _Unknown_command_="Unbekannter Befehl"
 _Valid_devices_="Gültige Geräte"

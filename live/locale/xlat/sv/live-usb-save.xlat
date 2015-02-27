@@ -1,0 +1,5 @@
+_Could_not_find_UUID_of_boot_device_for_remounting_="Kunde inte hitta boot-enhetens UUID för remounting"
+_Could_not_remount_boot_device_="Kunde inte återmontera boot enheten"
+_Save_X_desktop_Y_="Spara %s skrivbord %s"
+_Will_not_save_default_desktops_="Kommer inte att spara standard skrivbord"
+_restore_X_desktop_to_Y_="återställ %s skrivbord till %s"
