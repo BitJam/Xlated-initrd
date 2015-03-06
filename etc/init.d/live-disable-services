@@ -120,7 +120,7 @@ main() {
 
     if [ "$LEAN" ]; then
 
-        if test -d /sys/class/power_supply/BAT0; then
+        if test -e /live/config/laptop; then
             echo_live "$_Detected_laptop_mobile_device_"
         else
             LEAN_SERVICES="$LEAN_SERVICES $LAPTOP_SERVICES"
