@@ -1,0 +1,5 @@
+_Could_not_find_UUID_of_boot_device_for_remounting_="No s'ha trobat el UUID del dispositiu d'arrencada per tornar a muntar."
+_Could_not_remount_boot_device_="No s'ha pogut tornar a muntar el dispositiu d'arrencada "
+_Save_X_desktop_Y_="Desa l'escriptori %s a %s "
+_Will_not_save_default_desktops_="No es desaran els escriptoris per omissió."
+_restore_X_desktop_to_Y_="restaura l'escriptori %s a %s"

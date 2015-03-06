@@ -1,2 +1,6 @@
-_Please_remove_the_disc_close_the_tray_="Si us plau, tregui el disc, tanqueu la safata"
-_and_press_ENTER_to_continue_="i premeu ENTER per continuar"
+_Almost_all_process_terminated_immediately_="Gairebé tots els processos acabats immediatament "
+_Asking_most_remaining_processes_to_terminate_="Demanant la terminació dels processos restants "
+_Failed_to_umount_some_filesystems_="Ha fallat en desmuntar algun sistema de fitxers "
+_Killing_most_remaining_processes_="Eliminant la majoria de processos restants "
+_Please_remove_the_disc_close_the_tray_="Si us plau, traieu el disc i tanqueu la safata "
+_and_press_ENTER_to_continue_="i premeu ENTER per continuar "
