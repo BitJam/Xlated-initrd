@@ -388,6 +388,7 @@ main_core() {
     # FIXME: since we are using the real persist-save we can do these either
     # before or after we run the init scripts!
 
+    sync
     late_umount $PERSIST_DEVICE
     late_umount $SQFILE_DEV
 
@@ -3516,9 +3517,10 @@ _persist_makefs() {
 
 makefs() {
     local file=$1  type=$2  size=$3
-    mkdir -p $(dirname $file)                                     || return 1
-    dd if=/dev/zero of=$file bs=1M count=0 seek=$size &>/dev/null || return 2
-    ld_path /sbin/mkfs.$type -q -F $file              &>/dev/null || return 3
+    mkdir -p $(dirname $file)                                                 || return 1
+    dd if=/dev/zero of=$file bs=1M count=0 seek=$size 1>> $MY_LOG 2>> $MY_LOG || return 2
+    ld_path /sbin/mkfs.$type -q -F $file              1>> $MY_LOG 2>> $MY_LOG || return 3
+    sync
 }
 
 default_makefs_size() {
@@ -3631,7 +3633,7 @@ copy_persist_to_ram() {
          err  "Copy persistent root to RAM failed!  Will erase partial copy ..."
          rm -rf $AUFS_RAM_MP/*
          return 2
-     fi
+    fi
     local ram_used=$(used_space $AUFS_RAM_MP)
     #. AUFS uses [this much RAM]
     vmsg 7 "$format" '                     AUFS uses' $ram_used
@@ -3639,6 +3641,7 @@ copy_persist_to_ram() {
     vmsg 6 "${hi_co}%s"  "Copy persistent root to RAM succeeded"
 
     DF_ROOTFS="$(df -P -m $ROOTFS_MP | tail -n 1)"
+    sync
     log_cmd umount $ROOTFS_MP
     return 0
 }
