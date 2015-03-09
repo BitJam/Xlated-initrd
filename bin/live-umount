@@ -510,10 +510,10 @@ mountpoint_list() {
     while read dev mp type opts other; do
 
         case $type in 
-            tmpfs) case $mp in
-                        /aufs*)     ;;
-                        *) continue ;;
-                    esac ;;
+            tmpfs|devtmpfs) case $mp in
+                                /aufs*)          ;;
+                                     *) continue ;;
+                            esac ;;
         esac
 
         case $mp in
@@ -655,7 +655,7 @@ shutdown_or_reboot() {
 wait_for_user() {
 
     stty sane
-    printf "$rev_cyan%s: %s$nc"  "$_Please_remove_the_disc_close_the_tray_" \
+    printf "$rev_cyan%s %s$nc"  "$_Please_remove_the_disc_close_the_tray_" \
          "$_and_press_ENTER_to_continue_"
     read x
 }
