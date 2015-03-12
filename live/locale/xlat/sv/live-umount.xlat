@@ -1,2 +1,6 @@
+_Almost_all_process_terminated_immediately_="Nästan alla processer avslutades omedelbart"
+_Asking_most_remaining_processes_to_terminate_="Ber de flesta kvarvarande processerna att avsluta"
+_Failed_to_umount_some_filesystems_="Misslyckades med att avmontera en del filsystem"
+_Killing_most_remaining_processes_="Stoppade de flesta kvarvarande processerna"
 _Please_remove_the_disc_close_the_tray_="Ta bort skivan, stäng facket"
 _and_press_ENTER_to_continue_="och tryck ENTER för att fortsätta"
