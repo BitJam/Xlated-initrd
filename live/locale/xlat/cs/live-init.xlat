@@ -1,5 +1,4 @@
 _Bad_mirror_code_X_expected_two_letters_="Špatný kód záložního serveru %s (očekávána dvě písmena)"
-_Configuring_X_file_="Nastavení souboru %s"
 _Directory_not_found_X_="Adresář %s nenalezen"
 _Enabling_fstab_hotplugging_="Povolení výměny fstab za provozu"
 _Invalid_X_boot_parameter_Y_="Zavedení %s má neplatný parametr %s"

@@ -1,5 +1,4 @@
 _Bad_mirror_code_X_expected_two_letters_="شفرة مراّت سيئة %s (كنا نتوقع حرفين)"
-_Configuring_X_file_="إعداد ملف %s"
 _Directory_not_found_X_="الدليل غير موجود %s"
 _Enabling_fstab_hotplugging_="تمكين  التوصيل دون إيقاف التشغيل fstab"
 _Invalid_X_boot_parameter_Y_="مُعامل الإقلاع %s باطل %s"
