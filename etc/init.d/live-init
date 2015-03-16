@@ -157,7 +157,7 @@ create_home() {
 
     # Find $user user with home at $home
     if ! grep -q "^$user:[^:]*:[^:]*:[^:]*:[^:]*:$home:" /etc/passwd; then
-        echo_live "$_No_user_found_Not_populating_X_" $(pquote $user) $(pquote $home)
+        echo_live "$_No_X_user_found_Not_populating_Y_" $(pquote $user) $(pquote $home)
         return
     fi
 
