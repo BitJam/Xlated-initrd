@@ -8,4 +8,5 @@ _Localizing_configuring_X_Windows_="Localizzazione/Configurazione di X-Windows i
 _Localizing_menus_to_X_in_Y_="Traduzione dei menù da %s a %s"
 _Populating_X_directory_="Riempimento della directory %s in corso"
 _Setting_X_to_Y_="Impostare %s su %s"
+_Turning_automount_off_="Disattivazione del montaggio automatico in corso"
 _Unknown_menu_localization_language_X_="Lingua di localizzazione del menù %s sconosciuta"
