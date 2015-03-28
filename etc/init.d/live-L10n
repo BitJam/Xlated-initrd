@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/live/bin/sh
 
 ### BEGIN INIT INFO
 # Provides:          live-L10n
@@ -11,6 +11,8 @@
 # Short-Description: live-L10n
 # Description: Sets timezone, hostname, and console fonts.  Runs update-menus and update-locale
 ### END INIT INFO
+
+PATH=/live/bin:$PATH
 
 case "$1" in
     start) 
