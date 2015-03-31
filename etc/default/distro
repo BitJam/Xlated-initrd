@@ -6,7 +6,7 @@
 
 # specify distribution name
 DISTRO="antiX"
-DISTRO_VERSION="14-a4-RV"
+DISTRO_VERSION="15-b1-RV"
 DISTRO_CODENAME="Killah_P"
 
 # For fromiso install: 
