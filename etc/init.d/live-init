@@ -52,15 +52,12 @@ automount=off|amnt=off)                          AUTOMOUNT_OFF=true ;;
                fstab=*)    CMD_FSTAB=$value                         ;;
                 splash) SPLASH_PARAM=v                              ;;
               splash=*) SPLASH_PARAM=$value                         ;;
-
+           desktheme=*) DESK_THEME=$value                           ;;
     esac
 done
 
-PATH="/bin:/sbin:/usr/bin:/usr/sbin:/usr/X11R6/bin:/live/bin"; export PATH
-
 umask 022
 
-# . /usr/share/antiX/lib/live-init-utils.sh
 . /live/lib/live-init-utils.sh
 
 start_init_logging
@@ -140,25 +137,13 @@ Keyboard_Out
 
     [ "$CMD_DESKTOP" ] && set_default_desktop $CMD_DESKTOP
 
+    if [ "$DESK_THEME" ]; then
+        echo_live "$_Setting_desktop_theme_to_X_" $(pquote $DESK_THEME)
+        /usr/local/bin/set-desktop-theme --dir /home/demo $DESK_THEME
+        chown -R $user:users /home/demo 2>/dev/null
+    fi
+
     #localize_firefox $LANG
-
-    #enable_xkb="s/^#\?setxkbmap.*/setxkbmap -layout \"$XKBLAYOUT\" -option \"$XKBOPTIONS\" -variant \"$XKBVARIANT\"/"
-    enable_xkb="s/^#\?setxkbmap.*/setxkbmap -layout \"$XKBLAYOUT\" -option \"*$default_xkb_opts*\" -variant \"$XKBVARIANT\"/"
-
-    return
-
-    for wm in $MENU_WMs;  do
-        f1=/home/demo/.$wm/startup
-        f2=/etc/skel/.$wm/menu
-        f3=/etc/skel/.config/rox.sourceforge.net/ROX-Filer/pb_antiX-$wm
-        f4=/etc/skel/.$wm/startup
-        [ -e $f1 ] && sed -i -e "$enable_xkb"             $f1
-        [ -e $f2 ] && sed -i -e "/gksu antixsources.sh/d" $f2
-        [ -e $f3 ] && sed -i -e "/antixsources.desktop/d" $f3
-        [ -e $f4 ] && sed -i -e "/toram-eject/d"          $f4
-        [ -e $f4 ] && sed -i -e "/persist-config/d"       $f4
-        rm -f /etc/skel/Desktop/Install.desktop
-    done
 }
 
 create_home() {
