@@ -93,7 +93,7 @@ MKFS_FREE_MARGIN=20
 
       LAST_BP_TIME=0
 
-   GFX_SAVE_SCRIPT="/bin/gfxsave.sh"
+   GFX_SAVE_SCRIPT="/bin/gfxsave"
 
 set_live_dirs() {
     local dir=$1
@@ -219,8 +219,9 @@ main_wrapper() {
 
         CHROOT_BIN=$FINAL_DIR/bin
         chroot $NEW_ROOT $CHROOT_BIN/setsid $CHROOT_BIN/cttyhack $INIT_PROG
-
         breakpoint i "after init= chroot"
+
+        MY_LOG=/dev/null
         safe_shutdown poweroff ask
 
     else
@@ -335,6 +336,12 @@ main_core() {
     # 'fromiso' causes us to check md5sums in two places
     [ "$CHECK_MD5" ] && check_md5 $SQFILE_DIR
 
+    [ "$GFX_SAVE" ] && update_gfx_menu "$GFX_SAVE_SCRIPT" "$GFX_SAVE" "$BOOT_MP/boot"
+
+    # Disable always feature even if update_gfx_menu is not called
+    local gfx_def_file=$BOOT_MP/boot/syslinux/gfxsave.def
+    [ "$GFX_SAVE" != always ] && test -e $gfx_def_file && rm -f $gfx_def_file 2>/dev/null
+
     [ "$TO_RAM" ] && copy_to_ram "$SQFILE_FULL" $TORAM_MP
 
     check_kernel_version $SQFS_MP
@@ -347,8 +354,6 @@ main_core() {
     mount_aufs_ram "$AUFS_RAM_MP" "$MIN_AUFS_RAM" "$FREE_MEM"
 
     mount_and_copy_rootfs
-
-    [ "$GFX_SAVE" ] && update_gfx_menu "$GFX_SAVE_SCRIPT" "$GFX_SAVE" "$BOOT_MP/boot"
 
     [ "$STATIC_ROOT" ] && log_cmd umount $AUFS_RAM_MP
 
@@ -3738,7 +3743,7 @@ update_gfx_menu() {
     fi
 
     env VERBOSE=$VERBOSE NO_COLOR=$NO_COLOR LOW_COLOR=$LOW_COLOR \
-        GFX_LOG_FILE=$LOG_DIR/gfxsave.log $script $dir $param
+        GFX_LOG_FILE=/live/config/gfxsave.log /bin/sh $script $dir $param
 
     vmsg_nc 6 $tbar
 }
