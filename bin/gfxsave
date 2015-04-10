@@ -37,15 +37,21 @@ Expected$cheat_co always menus custom both$err_co or$cheat_co reset"
     # Do this once for both directories
     write_boot_param_hash
 
-    local pre
+    local pre extension
     for pre in ext sys; do
         TYPE=${pre}linux
         NAME=${pre}Linux
         XXX_LINUX_DIR=$GFX_BOOT_DIR/$TYPE
-        XXX_LINUX_CFG=$XXX_LINUX_DIR/$TYPE.cfg
-
         is_writable $XXX_LINUX_DIR/  dir $NAME || continue
-        is_writable $XXX_LINUX_CFG  file $NAME || continue
+
+        XXX_LINUX_CFG=
+        for extension in .cfg .conf; do
+            is_writable $XXX_LINUX_DIR/$TYPE$extension || continue
+            XXX_LINUX_CFG=$XXX_LINUX_DIR/$TYPE$extension
+            break
+        done
+
+        is_writable "$XXX_LINUX_CFG"  file $NAME || continue
 
         msg
         msg " Found directory:$cheat_co $XXX_LINUX_DIR"
@@ -234,6 +240,7 @@ reset_one_dir() {
 is_writable() {
     local file=$1 name=$2 type=$3
 
+    [ "$file" ] || return 1
     #msg8e  "Could not find" $type "$name" $file
     #msg8e "Cannot write to" $type "$name" $file
     if ! [ -e "$file" ]; then
