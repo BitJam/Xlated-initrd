@@ -37,19 +37,16 @@ Expected$cheat_co always menus custom both$err_co or$cheat_co reset"
     # Do this once for both directories
     write_boot_param_hash
 
-    local pre extension
+    local pre
     for pre in ext sys; do
         TYPE=${pre}linux
         NAME=${pre}Linux
         XXX_LINUX_DIR=$GFX_BOOT_DIR/$TYPE
         is_writable $XXX_LINUX_DIR/  dir $NAME || continue
-
-        XXX_LINUX_CFG=
-        for extension in .cfg .conf; do
-            is_writable $XXX_LINUX_DIR/$TYPE$extension || continue
-            XXX_LINUX_CFG=$XXX_LINUX_DIR/$TYPE$extension
-            break
-        done
+        case $pre in
+            ext) XXX_LINUX_CFG=$XXX_LINUX_DIR/$TYPE.conf ;;
+            sys) XXX_LINUX_CFG=$XXX_LINUX_DIR/$TYPE.cfg  ;;
+        esac
 
         is_writable "$XXX_LINUX_CFG"  file $NAME || continue
 
