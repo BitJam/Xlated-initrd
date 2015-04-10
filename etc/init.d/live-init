@@ -419,8 +419,8 @@ make_xorg_conf() {
     # Only force creation of safe xorg.conf if a custom xorg.conf does not
     # already exists
     if  [ "$vga_fb" -a ! -e $xorg_conf -a ! -e /live/config/virtualbox ]; then
-        echo_live "$_Forcing_X_windows_to_use_safe_mode_"
-        args=safe${args:+,}$args
+        echo_live "$_Forcing_X_windows_to_use_default_mode_"
+        args=default${args:+,}$args
     fi
 
     [ "$args" ] || return
