@@ -40,7 +40,8 @@ for param in $CMDLINE; do
          hwclock=local)   CMD_CLOCK=$value                          ;;
            hwclock=utc)   CMD_CLOCK=$value                          ;;
 
-              failsafe)   XORG_ARGS=$XORG_ARGS${XORG_ARGS:+,}safe   ;;
+              failsafe)   XORG_ARGS=safe${XORG_ARGS:+,}$XORG_ARGS   ;;
+             xorg=safe)   XORG_ARGS=safe${XORG_ARGS:+,}$XORG_ARGS   ;;
                 xorg=*)   XORG_ARGS=$XORG_ARGS${XORG_ARGS:+,}$value ;;
                 noxorg)   NO_XORG=true                              ;;
               earlyvid)   EARLY_VID=true                            ;;
@@ -410,7 +411,7 @@ make_xorg_conf() {
     # Force X video driver to be vesa if the vga framebuffer is enabled.
     if  [ "$vga_fb" -a -z "$no_default" -a -z "$safe_mode" ]; then
         echo_live "$_Forcing_X_windows_to_use_default_mode_"
-        args=safe${args:+,}$args
+        args=default${args:+,}$args
     fi
 
     [ "$args" ] || return
