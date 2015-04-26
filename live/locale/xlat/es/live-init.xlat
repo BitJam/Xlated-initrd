@@ -6,6 +6,7 @@ _Bad_mirror_code_X_expected_two_letters_="Código de mirror incorrecto %s (se es
 _Configuring_X_file_with_Y_="Configurando el archivo %s con %s"
 _Directory_not_found_X_="Directorio no encontrado %s"
 _Disabling_fstab_hotplugging_this_will_also_disable_automount_="Deshabilitando fstab hotplugging (también deshabilitará el montaje automático)"
+_Disabling_safe_mode_because_of_X_="Deshabilitando el modo seguro por %s"
 _Enabling_fstab_hotplugging_="Habilitando el hotplugging de fstab"
 _Files_already_exist_under_X_="Ya existen archivos bajo %s"
 _Forcing_X_windows_to_use_default_mode_="Forzando a X-windows a usar el modo por defecto"
