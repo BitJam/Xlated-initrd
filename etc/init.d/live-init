@@ -148,7 +148,8 @@ Keyboard_Out
 
     if [ "$DESK_THEME" ]; then
         echo_live "$_Setting_desktop_theme_to_X_" $(pquote $DESK_THEME)
-        /usr/local/bin/set-desktop-theme --dir /home/demo $DESK_THEME
+        /usr/local/bin/set-desktop-theme --dir /root --quiet $DESK_THEME
+        /usr/local/bin/set-desktop-theme --dir /home/demo    $DESK_THEME
         chown -R $user:users /home/demo 2>/dev/null
     fi
 
