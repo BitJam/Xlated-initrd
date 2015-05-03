@@ -2,7 +2,6 @@ _Bad_mirror_code_X_expected_two_letters_="شفرة مراّت سيئة %s (كن�
 _Directory_not_found_X_="الدليل غير موجود %s"
 _Enabling_fstab_hotplugging_="تمكين  التوصيل دون إيقاف التشغيل fstab"
 _Invalid_X_boot_parameter_Y_="مُعامل الإقلاع %s باطل %s"
-_Localizing_X_to_Y_mirror_="إضفاء الطابع المحلي %s إلى المراّت %s"
 _Localizing_configuring_X_Windows_="إضفاء الطابع المحلي\إعداد X-Windows"
 _Localizing_menus_to_X_in_Y_=" قائمة إضفاء الطابع المحلي إلى %s في %s"
 _Populating_X_directory_="ملء الدليل %s"

@@ -3,7 +3,6 @@ _Bad_mirror_code_X_expected_two_letters_="Errato codice mirror %s (previste due 
 _Directory_not_found_X_="Directory non trovata %s"
 _Enabling_fstab_hotplugging_="Abilitare in fstab l'autoriconoscimento, hotplug, dei dispositivi"
 _Invalid_X_boot_parameter_Y_="%s parametro di boot %s non valido"
-_Localizing_X_to_Y_mirror_="Localizzazione %s su mirror %s"
 _Localizing_configuring_X_Windows_="Localizzazione/Configurazione di X-Windows in corso"
 _Localizing_menus_to_X_in_Y_="Traduzione dei menù da %s a %s"
 _Populating_X_directory_="Riempimento della directory %s in corso"
