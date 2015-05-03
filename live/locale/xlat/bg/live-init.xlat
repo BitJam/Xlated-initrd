@@ -2,7 +2,6 @@ _Bad_mirror_code_X_expected_two_letters_="Лош огледален код %s (�
 _Directory_not_found_X_="Директория не е намерена %s"
 _Enabling_fstab_hotplugging_="Включване fstab хотплъгинг"
 _Invalid_X_boot_parameter_Y_="Невалиден %s бут параметър %s"
-_Localizing_X_to_Y_mirror_="Локализиране %s към %s огледало"
 _Localizing_configuring_X_Windows_="Локализиране/конфигуриране на X-Прозорци"
 _Localizing_menus_to_X_in_Y_="Локализиране менюта към %s в %s"
 _Populating_X_directory_="Запълване %s директория"

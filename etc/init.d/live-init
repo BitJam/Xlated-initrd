@@ -36,6 +36,7 @@ for param in $CMDLINE; do
                kbopt=*)   XKBOPTIONS=$value ;          DO_XKBD=true ;;
                kbvar=*)   XKBVARIANT=$value ;          DO_XKBD=true ;;
                 lang=*)     CMD_LANG=$value ;          DO_XKBD=true ;;
+                  tz=*)       CMD_TZ=$value                         ;;
               mirror=*)   CMD_MIRROR=$value                         ;;
          hwclock=local)   CMD_CLOCK=$value                          ;;
            hwclock=utc)   CMD_CLOCK=$value                          ;;
@@ -99,7 +100,9 @@ do_start() {
     [ "$CMD_LANG" ] && get_init_lang $CMD_LANG error
 
     MIRROR=${CMD_MIRROR:-$MIRROR}
-    [ "$MIRROR" ] && set_mirror $MIRROR
+    TZ=${CMD_TZ:-$TZ}
+
+    [ "$MIRROR" -o "$TZ" ] && repo_localize
 
     [ "$WM_LANG" ] && localize_skel $WM_LANG
 
@@ -239,20 +242,26 @@ set_dpi() {
     done
 }
 
-set_mirror() {
-    local mirror=$1
+repo_localize() {
 
-    if [ -z "$mirror" -o -n "${mirror##[a-zA-Z][a-zA-Z]}" ]; then
+    if [ -n "$CMD_MIRROR" -a -n "${CMD_MIRROR##[a-zA-Z][a-zA-Z]}" ]; then
         error "$_Bad_mirror_code_X_expected_two_letters_" $(pquote $mirror)
-        return
+        CMD_MIRROR=
     fi
 
-    source_list=/etc/apt/sources.list.d/debian.list
+    sources_dir=/etc/apt/sources.list.d
 
-    first_write $source_list || [ "$CMD_MIRROR" ] || return
+    first_write $sources_dir || [ "$CMD_MIRROR" -o "$CMD_TZ" ] || return
 
-    echo_live "$_Localizing_X_to_Y_mirror_" $(pquote $source_list) $(pquote $mirror)
-    sed -i "s=/ftp\.\(..\.\)\\?debian\.org/=/ftp.$mirror.debian.org/=" $source_list
+    local arg=$CMD_MIRROR   # cheat mirror=xx overides all else
+    : ${arg:=$CMD_TZ}       # next come tz=xxx/yyy cheat (or via menu)
+    : ${arg:=$TZ}           # The the lang timezone
+    : ${arg:=$MIRROR}       # This should never be needed
+    
+    [ "$arg" ] || return
+
+    echo_live "$_Localizing_source_repos_using_X_" $(pquote $arg)
+    repo-localize --verbose $arg
 }
 
 set_utc_local() {
@@ -404,8 +413,10 @@ make_xorg_conf() {
 
     case $fb_name in
       "VESA VGA") vga_fb=true ;;
-       "EFI VGA") echo_live "$_Disabling_safe_mode_because_of_X_" $(pquote EFI)
-                  safe_mode=  ;;
+       "EFI VGA") if [ "$safe_mode" ]; then
+                    echo_live "$_Disabling_safe_mode_because_of_X_" $(pquote EFI framebuffer)
+                    safe_mode=
+                fi ;;
     esac
 
     # Force X video driver to be vesa if the vga framebuffer is enabled.
