@@ -30,6 +30,7 @@ KMS_VIDEO_MODULES="ast|cirrus|gma500_gfx|ch7006|tda998x|i915|mgag200|nouveau|qxl
 for param in $CMDLINE; do
     value=${param#*=}
     case "$param" in
+                   db+)      DB_PLUS=true                           ;;
              desktop=*)  CMD_DESKTOP=$value                         ;;
                  dpi=*)      CMD_DPI=$value                         ;;
                  kbd=*)      CMD_KBD=$value ;          DO_XKBD=true ;;
@@ -38,8 +39,8 @@ for param in $CMDLINE; do
                 lang=*)     CMD_LANG=$value ;          DO_XKBD=true ;;
                   tz=*)       CMD_TZ=$value                         ;;
               mirror=*)   CMD_MIRROR=$value                         ;;
-         hwclock=local)   CMD_CLOCK=$value                          ;;
-           hwclock=utc)   CMD_CLOCK=$value                          ;;
+         hwclock=local)    CMD_CLOCK=$value                         ;;
+           hwclock=utc)    CMD_CLOCK=$value                         ;;
 
               failsafe)   XORG_ARGS=safe${XORG_ARGS:+,}$XORG_ARGS   ;;
              xorg=safe)   XORG_ARGS=safe${XORG_ARGS:+,}$XORG_ARGS   ;;
@@ -148,8 +149,8 @@ Keyboard_Out
 
     if [ "$DESK_THEME" ]; then
         echo_live "$_Setting_desktop_theme_to_X_" $(pquote $DESK_THEME)
-        /usr/local/bin/set-desktop-theme --dir /root --quiet $DESK_THEME
-        /usr/local/bin/set-desktop-theme --dir /home/demo    $DESK_THEME
+        /usr/local/bin/set-desktop-theme --root           $DESK_THEME
+        /usr/local/bin/set-desktop-theme --dir /home/demo $DESK_THEME
         chown -R $user:users /home/demo 2>/dev/null
     fi
 
@@ -258,11 +259,14 @@ repo_localize() {
     : ${arg:=$CMD_TZ}       # next come tz=xxx/yyy cheat (or via menu)
     : ${arg:=$TZ}           # The the lang timezone
     : ${arg:=$MIRROR}       # This should never be needed
-    
+
     [ "$arg" ] || return
 
+    local verbose
+    [ "$DB_PLUS" ] && verbose=--verbose
+
     echo_live "$_Localizing_source_repos_using_X_" $(pquote $arg)
-    repo-localize --verbose $arg
+    repo-localize $verbose $arg
 }
 
 set_utc_local() {
