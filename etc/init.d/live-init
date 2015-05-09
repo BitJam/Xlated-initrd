@@ -98,12 +98,10 @@ do_start() {
 
     #-jbb: for debugging
     unset COUNTRY WM_LANG KEYBOARDS KEYTABLE LANG MIRROR TZ XKBLAYOUT CONSOLE_FONT
+
     [ "$CMD_LANG" ] && get_init_lang $CMD_LANG error
 
-    MIRROR=${CMD_MIRROR:-$MIRROR}
-    TZ=${CMD_TZ:-$TZ}
-
-    [ "$MIRROR" -o "$TZ" ] && repo_localize
+    repo_localize "$CMD_MIRROR" "$CMD_TZ" "$MIRROR" "$TZ"
 
     [ "$WM_LANG" ] && localize_skel $WM_LANG
 
@@ -128,57 +126,72 @@ Keyboard_Out
 
     [ "$CMD_CLOCK"   ] && set_utc_local $CMD_CLOCK
 
-    [ "$CMD_DPI" ] && set_dpi $CMD_DPI
+    # Only do X stuff on systems that seem to have X
+    if which X &>/dev/null; then
 
-    create_home
+        [ "$CMD_DPI" ] && set_dpi $CMD_DPI
 
-    if [ "$EARLY_VID" ]; then
-        load_video_driver
-    else
-        detect_kms_driver
+        if [ "$EARLY_VID" ]; then
+            load_video_driver
+        else
+            detect_kms_driver
+        fi
+
+        make_xorg_conf "$XORG_ARGS" "$FOUND_KMS"
+        HAVE_X=true
     fi
 
-    # Don't bother with X stuff on systems without X
+    # Find the "default" user.  This is usually "demo" but can vary on snapshots
+    # and such.  First check the default user for SLiM and lightdm.  Then get
+    # more desparate.
+
+    THE_USER=$(sed -r -n 's/^\s*default_user\s+//p' /etc/slim.conf 2>/dev/null)
+    : ${THE_USER:=$(sed -r -n 's/^\s*autologin-user=//p' /etc/lightdm/lightdm.conf 2>/dev/null)}
+    : ${THE_USER:=$(getent passwd 1000 | cut -d: -f1)}
+    : ${THE_USER:=demo}
+    THE_USER=${THE_USER%% *}
+
+    USER_HOME=$(getent passwd $THE_USER | cut -d: -f6)
+
+    if [ -z "$USER_HOME" ]; then
+        echo_live "$_No_default_user_X_found_on_the_system_" $(pquote $THE_USER)
+        return
+    fi
+
+    create_home $THE_USER $USER_HOME
+
+    # Don't bother with desktop stuff on systems without X
     #--------------------------------------------------------------------------
-    [ -d "$XSESSION_DIR" ] || return
+    [ "$HAVE_X" ] || return
     #--------------------------------------------------------------------------
 
-    make_xorg_conf "$XORG_ARGS" "$FOUND_KMS"
-
-    [ "$CMD_DESKTOP" ] && set_default_desktop $CMD_DESKTOP
+    [ "$CMD_DESKTOP" ] && set_default_desktop $CMD_DESKTOP $THE_USER $USER_HOME
 
     if [ "$DESK_THEME" ]; then
-        echo_live "$_Setting_desktop_theme_to_X_" $(pquote $DESK_THEME)
-        /usr/local/bin/set-desktop-theme --root           $DESK_THEME
-        /usr/local/bin/set-desktop-theme --dir /home/demo $DESK_THEME
-        chown -R $user:users /home/demo 2>/dev/null
+        echo_live "$_Setting_desktop_theme_to_X_" $(pquote  $DESK_THEME)
+        set-desktop-theme --root $DESK_THEME
+        su -c "set-desktop-theme --dir $USER_HOME $DESK_THEME" $THE_USER
     fi
 
     #localize_firefox $LANG
 }
 
 create_home() {
-    local user=demo
-    local home=/home/$user
+    local user=$1 home=$2
 
-    # Find $user user with home at $home
-    if ! grep -q "^$user:[^:]*:[^:]*:[^:]*:[^:]*:$home:" /etc/passwd; then
-        echo_live "$_No_X_user_found_Not_populating_Y_" $(pquote $user) $(pquote $home)
-        return
-    fi
-
-    rmdir $demo 2>/dev/null
+    # Remove only an *empty* home directory
+    rmdir $home 2>/dev/null
     if test -d $home; then
+        return
+        # These don't run but the don't leave the .pot file either
         echo_live "$_Files_already_exist_under_X_" $(pquote $home)
         echo_live "$_Not_creating_or_populating_X_" $(pquote $home)
-        return
     fi
 
     echo_live "$_Populating_X_directory_" $(pquote $home)
-
-    mkdir -p $home
-    cp -r -P -p mode /etc/skel/* /etc/skel/.[a-zA-Z]* $home 2>/dev/null
-    chown -R $user:users $home 2>/dev/null
+    # Relies on there being no $home directory (see test above)
+    cp -a /etc/skel $home
+    chown -R $user:users $home
 }
 
 localize_skel() {
@@ -245,22 +258,22 @@ set_dpi() {
 }
 
 repo_localize() {
+    local mirror=$1  tz=$2  lang_mirror=$3  lang_tz=$4
 
-    if [ -n "$CMD_MIRROR" -a -n "${CMD_MIRROR##[a-zA-Z][a-zA-Z]}" ]; then
+    if [ -n "$mirror" -a -n "${mirror##[a-zA-Z][a-zA-Z]}" ]; then
         error "$_Bad_mirror_code_X_expected_two_letters_" $(pquote $mirror)
-        CMD_MIRROR=
+        mirror=
     fi
 
-    sources_dir=/etc/apt/sources.list.d
-
-    first_write $sources_dir || [ "$CMD_MIRROR" -o "$CMD_TZ" ] || return
-
-    local arg=$CMD_MIRROR   # cheat mirror=xx overides all else
-    : ${arg:=$CMD_TZ}       # next come tz=xxx/yyy cheat (or via menu)
-    : ${arg:=$TZ}           # The the lang timezone
-    : ${arg:=$MIRROR}       # This should never be needed
+    local arg=$mirror         # cheat mirror=xx overides all else
+    : ${arg:=$tz}             # next come tz=xxx/yyy cheat (or via tz menu)
+    : ${arg:=$lang_tz}        # The lang based timezone
+    : ${arg:=$lang_mirror}    # The lang based mirror should never be needed
 
     [ "$arg" ] || return
+
+    sources_dir=/etc/apt/sources.list.d
+    first_write $sources_dir || [ "$mirror" -o "$tz" ] || return
 
     local verbose
     [ "$DB_PLUS" ] && verbose=--verbose
@@ -284,9 +297,11 @@ set_utc_local() {
 }
 
 set_default_desktop() {
-    local desktop=$1 desktop_file=/home/demo/.desktop-session/default-desktop
+    local desktop=$1  user=$2  home=$3
+    local file=$home/.desktop-session/default-desktop
     echo_live "$_Setting_X_to_Y_" desktop $(pquote $desktop)
-    echo $desktop > $desktop_file
+    su -c "mkdir -p $(dirname $file)" $user
+    echo $desktop | su -c "tee $desktop_file" $user &>/dev/null
 }
 
 add_fstab_swap() {
