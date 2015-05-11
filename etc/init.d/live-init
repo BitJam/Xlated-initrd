@@ -87,55 +87,30 @@ main() {
 do_start() {
     echo_script "$_Localizing_configuring_X_Windows_" $0
 
-    local DISTRO="unknown"
-    get_init_param DISTRO
-
-    case $DISTRO in
-        antiX) automount_and_fstab;;
-      MX|MX-*) add_fstab_swap     ;;
-            *) error 'Unknown_distro %s' "$(pquote $DISTRO)"
-    esac
+    get_init_param DISTRO "unknown"
+    create_fstab $DISTRO
 
     #-jbb: for debugging
     unset COUNTRY WM_LANG KEYBOARDS KEYTABLE LANG MIRROR TZ XKBLAYOUT CONSOLE_FONT
 
-    [ "$CMD_LANG" ] && get_init_lang $CMD_LANG error
-
-    repo_localize "$CMD_MIRROR" "$CMD_TZ" "$MIRROR" "$TZ"
-
-    [ "$WM_LANG" ] && localize_skel $WM_LANG
+    get_init_lang "$CMD_LANG" error
+    localize_repo "$CMD_MIRROR" "$CMD_TZ" "$MIRROR" "$TZ"
+    localize_skel $WM_LANG
 
     # Always create keyboard file in non-perisistent system even with no X
-    kb_file=/etc/default/keyboard
-    default_xkb_opts="grp:alt_shift_toggle,terminate:ctrl_alt_bksp,grp_led:scroll"
-
-    if first_write $kb_file || [ "$DO_XKBD" ]; then
-        XKBLAYOUT=${CMD_KBD:-$XKBLAYOUT}
-        [ "$XKBLAYOUT"  ] && echo_live "$_Setting_X_to_Y_" $(pquote xkb-layout)  $(pquote $XKBLAYOUT)
-        [ "$XKBMODEL"   ] && echo_live "$_Setting_X_to_Y_" $(pquote xkb-model)   $(pquote $XKBMODEL)
-        [ "$XKBVARIANT" ] && echo_live "$_Setting_X_to_Y_" $(pquote xkb-variant) $(pquote $XKBVARIANT)
-        [ "$XKBOPTIONS" ] && echo_live "$_Setting_X_to_Y_" $(pquote xkb-options) $(pquote $XKBOPTIONS)
-
-        cat > $kb_file <<Keyboard_Out
-XKBMODEL="${XKBMODEL:=pc105}"
-XKBLAYOUT="${XKBLAYOUT:=us}"
-XKBVARIANT="${XKBVARIANT}"
-XKBOPTIONS="${XKBOPTIONS:=$default_xkb_opts}"
-Keyboard_Out
-    fi
-
-    [ "$CMD_CLOCK"   ] && set_utc_local $CMD_CLOCK
+    set_keyboard
+    set_utc_local $CMD_CLOCK
 
     # Only do X stuff on systems that seem to have X
     if which X &>/dev/null; then
-
-        [ "$CMD_DPI" ] && set_dpi $CMD_DPI
 
         if [ "$EARLY_VID" ]; then
             load_video_driver
         else
             detect_kms_driver
         fi
+
+        set_dpi $CMD_DPI
 
         make_xorg_conf "$XORG_ARGS" "$FOUND_KMS"
         HAVE_X=true
@@ -145,163 +120,40 @@ Keyboard_Out
     # and such.  First check the default user for SLiM and lightdm.  Then get
     # more desparate.
 
-    THE_USER=$(sed -r -n 's/^\s*default_user\s+//p' /etc/slim.conf 2>/dev/null)
-    : ${THE_USER:=$(sed -r -n 's/^\s*autologin-user=//p' /etc/lightdm/lightdm.conf 2>/dev/null)}
-    : ${THE_USER:=$(getent passwd 1000 | cut -d: -f1)}
-    : ${THE_USER:=demo}
-    THE_USER=${THE_USER%% *}
+    DEF_USER=$(find_def_user)
 
-    USER_HOME=$(getent passwd $THE_USER | cut -d: -f6)
+    USER_HOME=$(getent passwd "$DEF_USER" | cut -d: -f6)
 
     if [ -z "$USER_HOME" ]; then
-        echo_live "$_No_default_user_X_found_on_the_system_" $(pquote $THE_USER)
+        echo_live "$_No_default_user_X_found_on_the_system_" $(pquote $DEF_USER)
         return
     fi
 
-    create_home $THE_USER $USER_HOME
+    create_home $DEF_USER $USER_HOME
 
     # Don't bother with desktop stuff on systems without X
     #--------------------------------------------------------------------------
     [ "$HAVE_X" ] || return
     #--------------------------------------------------------------------------
 
-    [ "$CMD_DESKTOP" ] && set_default_desktop $CMD_DESKTOP $THE_USER $USER_HOME
-
-    if [ "$DESK_THEME" ]; then
-        echo_live "$_Setting_desktop_theme_to_X_" $(pquote  $DESK_THEME)
-        set-desktop-theme --root $DESK_THEME
-        su -c "set-desktop-theme --dir $USER_HOME $DESK_THEME" $THE_USER
-    fi
+    set_default_desktop "$CMD_DESKTOP" $DEF_USER $USER_HOME
+    set_desktop_theme   "$DESK_THEME"  $DEF_USER $USER_HOME
 
     #localize_firefox $LANG
 }
 
-create_home() {
-    local user=$1 home=$2
 
-    # Remove only an *empty* home directory
-    rmdir $home 2>/dev/null
-    if test -d $home; then
-        return
-        # These don't run but the don't leave the .pot file either
-        echo_live "$_Files_already_exist_under_X_" $(pquote $home)
-        echo_live "$_Not_creating_or_populating_X_" $(pquote $home)
-    fi
+#-------------------------------------------------------------------------------
+# FSTAB stuff
+#-------------------------------------------------------------------------------
+create_fstab() {
+    local distro=$1
 
-    echo_live "$_Populating_X_directory_" $(pquote $home)
-    # Relies on there being no $home directory (see test above)
-    cp -a /etc/skel $home
-    chown -R $user:users $home
-}
-
-localize_skel() {
-    local l10n_dir=/usr/share/antiX/localisation
-    local from=$l10n_dir/$1
-    local dest=/etc/skel
-
-    # Silently skip systems which have no localisation directory
-    [ -d "$l10n_dir" ] || return
-
-    if ! [ -d $from ]; then
-        error "$_Unknown_menu_localization_language_X_" $(pquote $1)
-        error "$_Directory_not_found_X_" $from
-        return
-    fi
-
-    echo_live "$_Localizing_menus_to_X_in_Y_" $(pquote $0) $(pquote $dest)
-
-    # Basically a cp -a but make all top level files and directories hidden
-    for file in $(ls $from); do
-       if [ -d $from/$file ]; then
-           mkdir -p /$dest/.$file
-           cp -a $from/$file/* $dest/.$file
-       else
-           rm -rf $dest/.$file
-           cp -a $from/$file $dest/.$file
-       fi
-    done
-}
-
-#FIXME:
-localize_firefox() {
-    local pref_files file lang=$1
-    local string="user_pref(\"spellchecker.dictionary\","
-
-    pref_files=$(ls $FF_PREFS 2>/dev/null)
-    [ "$pref_files" ] || return
-    sed -i  "/$string/d" $pref_files
-    for file in $pref_files; do
-        echo "$string \"$lang\");" >> $file
-    done
-}
-
-set_dpi() {
-    local dpi=$1
-
-    if ! echo $dpi | grep -q "^[[:digit:]]\+$"; then
-        error "$_Invalid_X_boot_parameter_Y_" $(pquote dpi) $(pquote $dpi)
-        return
-    fi
-
-    echo_live "$_Setting_X_to_Y_" $(pquote dpi) $(pquote $dpi)
-
-    local file
-    for file in /etc/slim.conf /usr/share/slim/themes/antiX/slim-install.conf; do
-        [ -e $file ] || continue
-        sed -i -e "s/^xserver_arguments.*/xserver_arguments -dpi $dpi -nolisten tcp/" $file
-    done
-
-    for file in /etc/lightdm/lightdm.conf; do
-        [ -e $file ] || continue
-        sed -i -r "s/^#?\s*(xserver-command=X).*/\1 -dpi $dpi/" $file
-    done
-}
-
-repo_localize() {
-    local mirror=$1  tz=$2  lang_mirror=$3  lang_tz=$4
-
-    if [ -n "$mirror" -a -n "${mirror##[a-zA-Z][a-zA-Z]}" ]; then
-        error "$_Bad_mirror_code_X_expected_two_letters_" $(pquote $mirror)
-        mirror=
-    fi
-
-    local arg=$mirror         # cheat mirror=xx overides all else
-    : ${arg:=$tz}             # next come tz=xxx/yyy cheat (or via tz menu)
-    : ${arg:=$lang_tz}        # The lang based timezone
-    : ${arg:=$lang_mirror}    # The lang based mirror should never be needed
-
-    [ "$arg" ] || return
-
-    sources_dir=/etc/apt/sources.list.d
-    first_write $sources_dir || [ "$mirror" -o "$tz" ] || return
-
-    local verbose
-    [ "$DB_PLUS" ] && verbose=--verbose
-
-    echo_live "$_Localizing_source_repos_using_X_" $(pquote $arg)
-    repo-localize $verbose $arg
-}
-
-set_utc_local() {
-    local new=$1 file=/etc/adjtime
-    #grep -i -q $new $file && return
-
-    echo_live "$_Assuming_X_is_set_to_Y_time_" hwclock $(pquote $new)
-
-    case $new in
-        local) sed -i 's/^UTC\s*$/LOCAL/' $file
-               hwclock --hctosys --localtime      ;;
-          utc) sed -i 's/^LOCAL\s*$/UTC/' $file
-               hwclock --hctosys --utc            ;;
+    case $distro in
+        antiX) automount_and_fstab;;
+      MX|MX-*) add_fstab_swap     ;;
+            *) error 'Unknown_distro %s' "$(pquote $distro)"
     esac
-}
-
-set_default_desktop() {
-    local desktop=$1  user=$2  home=$3
-    local file=$home/.desktop-session/default-desktop
-    echo_live "$_Setting_X_to_Y_" desktop $(pquote $desktop)
-    su -c "mkdir -p $(dirname $file)" $user
-    echo $desktop | su -c "tee $desktop_file" $user &>/dev/null
 }
 
 add_fstab_swap() {
@@ -389,6 +241,106 @@ automount_and_fstab() {
             touch $hp_file;;
     esac
 }
+
+
+#-------------------------------------------------------------------------------
+# Misc. Customizations
+#-------------------------------------------------------------------------------
+localize_skel() {
+    local lang=$1
+    [ "$lang" ] || return
+    local L10n_dir=/usr/share/antiX/localisation
+    local from=$L10n_dir/$lang
+    local dest=/etc/skel
+
+    # Silently skip systems which have no localisation directory
+    [ -d "$L10n_dir" ] || return
+
+    if ! [ -d $from ]; then
+        error "$_Unknown_menu_localization_language_X_" $(pquote $lang)
+        error "$_Directory_not_found_X_" $from
+        return
+    fi
+
+    echo_live "$_Localizing_menus_to_X_in_Y_" $(pquote $0) $(pquote $dest)
+
+    # Basically a cp -a but make all top level files and directories hidden
+    for file in $(ls $from); do
+       if [ -d $from/$file ]; then
+           mkdir -p /$dest/.$file
+           cp -a $from/$file/* $dest/.$file
+       else
+           rm -rf $dest/.$file
+           cp -a $from/$file $dest/.$file
+       fi
+    done
+}
+
+set_keyboard() {
+    local kb_file=/etc/default/keyboard
+    local default_xkb_opts="grp:alt_shift_toggle,terminate:ctrl_alt_bksp,grp_led:scroll"
+
+    first_write $kb_file || [ "$DO_XKBD" ] || return
+
+    XKBLAYOUT=${CMD_KBD:-$XKBLAYOUT}
+    [ "$XKBLAYOUT"  ] && echo_live "$_Setting_X_to_Y_" $(pquote xkb-layout)  $(pquote $XKBLAYOUT)
+    [ "$XKBMODEL"   ] && echo_live "$_Setting_X_to_Y_" $(pquote xkb-model)   $(pquote $XKBMODEL)
+    [ "$XKBVARIANT" ] && echo_live "$_Setting_X_to_Y_" $(pquote xkb-variant) $(pquote $XKBVARIANT)
+    [ "$XKBOPTIONS" ] && echo_live "$_Setting_X_to_Y_" $(pquote xkb-options) $(pquote $XKBOPTIONS)
+
+    cat > $kb_file <<Keyboard_Out
+XKBMODEL="${XKBMODEL:=pc105}"
+XKBLAYOUT="${XKBLAYOUT:=us}"
+XKBVARIANT="${XKBVARIANT}"
+XKBOPTIONS="${XKBOPTIONS:=$default_xkb_opts}"
+Keyboard_Out
+}
+
+localize_repo() {
+    local mirror=$1  tz=$2  lang_mirror=$3  lang_tz=$4
+
+    if [ -n "$mirror" -a -n "${mirror##[a-zA-Z][a-zA-Z]}" ]; then
+        error "$_Bad_mirror_code_X_expected_two_letters_" $(pquote $mirror)
+        mirror=
+    fi
+
+    local arg=$mirror         # cheat mirror=xx overides all else
+    : ${arg:=$tz}             # next come tz=xxx/yyy cheat (or via tz menu)
+    : ${arg:=$lang_tz}        # The lang based timezone
+    : ${arg:=$lang_mirror}    # The lang based mirror should never be needed
+
+    [ "$arg" ] || return
+
+    sources_dir=/etc/apt/sources.list.d
+    first_write $sources_dir || [ "$mirror" -o "$tz" ] || return
+
+    local verbose
+    [ "$DB_PLUS" ] && verbose=--verbose
+
+    echo_live "$_Localizing_source_repos_using_X_" $(pquote $arg)
+    localize-repo $verbose $arg
+}
+
+set_utc_local() {
+    local new=$1 file=/etc/adjtime
+    [ "$new" ] || return
+
+    echo_live "$_Assuming_X_is_set_to_Y_time_" hwclock $(pquote $new)
+
+    #grep -i -q $new $file && return
+
+    case $new in
+        local) sed -i 's/^UTC\s*$/LOCAL/' $file
+               hwclock --hctosys --localtime      ;;
+          utc) sed -i 's/^LOCAL\s*$/UTC/' $file
+               hwclock --hctosys --utc            ;;
+    esac
+}
+
+
+#-------------------------------------------------------------------------------
+# XORG and VIDEO stuff
+#-------------------------------------------------------------------------------
 
 # Don't make a default xorg.conf if:
 #    1) a modified xorg.conf is found
@@ -507,6 +459,96 @@ detect_kms_driver() {
     FOUND_KMS=true
 }
 
+set_dpi() {
+    local dpi=$1
+    [ "$dpi" ] || return
+
+    if ! echo $dpi | grep -q "^[[:digit:]]\+$"; then
+        error "$_Invalid_X_boot_parameter_Y_" $(pquote dpi) $(pquote $dpi)
+        return
+    fi
+
+    echo_live "$_Setting_X_to_Y_" $(pquote dpi) $(pquote $dpi)
+
+    local file
+    for file in /etc/slim.conf /usr/share/slim/themes/antiX/slim-install.conf; do
+        [ -e $file ] || continue
+        sed -i -e "s/^xserver_arguments.*/xserver_arguments -dpi $dpi -nolisten tcp/" $file
+    done
+
+    for file in /etc/lightdm/lightdm.conf; do
+        [ -e $file ] || continue
+        sed -i -r "s/^#?\s*(xserver-command=X).*/\1 -dpi $dpi/" $file
+    done
+}
+
+
+#-------------------------------------------------------------------------------
+# DEFAULT USER stuff
+#-------------------------------------------------------------------------------
+find_def_user() {
+    local user=$(sed -r -n 's/^\s*default_user\s+//p' /etc/slim.conf 2>/dev/null)
+    : ${user:=$(sed -r -n 's/^\s*autologin-user=//p' /etc/lightdm/lightdm.conf 2>/dev/null)}
+    : ${user:=$(getent passwd 1000 | cut -d: -f1)}
+    : ${user:=demo}
+    echo ${user%% *}
+}
+
+create_home() {
+    local user=$1 home=$2
+
+    # Remove only an *empty* home directory
+    rmdir $home 2>/dev/null
+    if test -d $home; then
+        return
+        # These don't run but the don't leave the .pot file either
+        echo_live "$_Files_already_exist_under_X_" $(pquote $home)
+        echo_live "$_Not_creating_or_populating_X_" $(pquote $home)
+    fi
+
+    echo_live "$_Populating_X_directory_" $(pquote $home)
+    # Relies on there being no $home directory (see test above)
+    cp -a /etc/skel $home
+    chown -R $user:users $home
+}
+
+set_default_desktop() {
+    local desktop=$1  user=$2  home=$3
+    [ "$desktop" ] || return
+
+    local file=$home/.desktop-session/default-desktop
+    echo_live "$_Setting_X_to_Y_" desktop $(pquote $desktop)
+    su -c "mkdir -p $(dirname $file)" $user
+    echo $desktop | su -c "tee $file" $user >/dev/null
+}
+
+set_desktop_theme() {
+    local theme=$1  user=$2  home=$3
+    [ "$theme" ] || return
+
+    echo_live "$_Setting_desktop_theme_to_X_" $(pquote $theme)
+    set-desktop-theme --root $theme
+    su -c "set-desktop-theme --dir $home $theme" $user
+}
+
+#FIXME:
+localize_firefox() {
+    local pref_files file lang=$1
+    local string="user_pref(\"spellchecker.dictionary\","
+
+    pref_files=$(ls $FF_PREFS 2>/dev/null)
+    [ "$pref_files" ] || return
+    sed -i  "/$string/d" $pref_files
+    for file in $pref_files; do
+        echo "$string \"$lang\");" >> $file
+    done
+}
+
+
+#-------------------------------------------------------------------------------
+# UTILITIES
+#-------------------------------------------------------------------------------
+
 # Always copy to $file$ext2 so this has the most recent backup.
 # Only move to $file$ext1 if it does not already exist so this will
 # contain the earliest (oldest) backup.
@@ -526,6 +568,8 @@ move_if() {
     mv -f $f1 $f2
 }
 
+#-------------------------------------------------------------------------------
+#-------------------------------------------------------------------------------
 main "$@" 2>&1 | tee -a $INIT_LOG_FILE
 
 exit 0
