@@ -78,7 +78,11 @@ else
     ERROR_PARAM_COLOR="$RED"
 fi
 
-get_init_param() { eval $(grep ^$1= $INITRD_OUT) ;}
+get_init_param() {
+    local var=$1  val=$2
+    [ "$val" ] && eval $var=\$$val
+    eval $(grep ^$1= $INITRD_OUT)
+}
 
 # alias pf=printf  (**sigh**)
 pf() {
@@ -141,13 +145,14 @@ load_translation() {
 }
 
 get_init_lang() {
-    local lang=$1
+    local lang=$1 do_eror=$2
+    [ "$lang" ] || return
 
     load_translation live-init-utils.sh
 
     local lang_file=$INIT_LANG_DIR/$lang.lang
     if ! [ -r "$lang_file" ]; then
-        [ "$2" ] && init_lang_error $1
+        [ "$do_error" ] && init_lang_error $lang
         return 1
     fi
 
