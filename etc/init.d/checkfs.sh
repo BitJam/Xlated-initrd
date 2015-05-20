@@ -22,6 +22,10 @@ FSCK_LOGFILE=/var/log/fsck/checkfs
 . /lib/init/swap-functions.sh
 
 do_start () {
+    # Don't check all filesystems on the Live system
+	rm -f /fastboot /forcefsck 2>/dev/null
+    exit 0
+
 	# Trap SIGINT so that we can handle user interupt of fsck.
 	trap "" INT
 
