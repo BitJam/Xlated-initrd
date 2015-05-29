@@ -62,7 +62,7 @@ me=${0##*/}
    LOCALE_DIR=/locale
  CMDLINE_FILE=/live/CMDLINE
 HIJACKED_INIT=/hijacked-init
- PROTECT_LIST="^(/sbin/mount.ntfs|mount.ntfs|mount.fuse|mount.cifs|ntfs-3g|/sbin/mount.ntfs-3g)$"
+ PROTECT_LIST="^(/sbin/mount.ntfs|mount.ntfs|mount.fuse|mount.cifs|ntfs-3g|/sbin/mount.ntfs-3g|rpcbind)$"
    TARDY_LIST="^(acpid)$"
 BOOT_DEV_FILE=/config/boot-device
 
@@ -93,11 +93,39 @@ main() {
     [ "$me" = 'shutdown' ] && do_shutdown
 
     case $1 in
-     --sendsigs) do_sendsigs   ;;
-     --umountfs) do_umountfs   ;;
- --final-umount) final_umount  ;;
-              *) err 'Expected --umountfs or --sendsigs'
+     --run-scripts) do_scripts    ;;
+        --sendsigs) do_sendsigs   ;;
+        --umountfs) do_umountfs   ;;
+    --final-umount) final_umount  ;;
+                 *) err 'Expected --umountfs or --sendsigs'
     esac
+}
+
+do_scripts() {
+
+    PATH=$BUSYBOX_BIN:/bin
+    export PATH
+
+    breakpoint s1 "Before running scripts"
+    # Make sure we have a fresh line to print out on
+    # echo
+
+    find_mounted_cd $BOOT_DEV_FILE
+
+    # FIXME: remove persist-autosave below for production
+    local scripts=persist-autosave
+    [ -z "$TO_EJECT"               ] && scripts="$scripts live-usb-save"
+    [ -e /live/config/save-persist ] && scripts="$scripts persist-autosave"
+    [ -e /live/config/static-root  ] && scripts="$scripts live-static-shutdown"
+
+    # Only say we are running scripts if we actually run at least one script
+    [ "$scripts" ] || return
+
+    msg "${white}run-scripts"
+
+    run_scripts $scripts
+
+    breakpoint s2 "After running scripts"
 }
 
 #------------------------------------------------------------------------------
@@ -113,6 +141,11 @@ do_sendsigs() {
     PATH=$BUSYBOX_BIN:/bin
     export PATH
 
+    if [ "$(pgrep "^acpid$")" ]; then
+        echo  "$_tell_acpid_to_stop_"
+        /etc/init.d/acpid stop
+    fi
+
     msg "${white}sendsigs"
     #chvt 1
 
@@ -122,17 +155,7 @@ do_sendsigs() {
 
     #BREAK_POINTS=
 
-    # Make sure we have a fresh line to print out on
-    echo
-
-    find_mounted_cd $BOOT_DEV_FILE
-
-    local scripts
-    [ -z "$TO_EJECT"               ] && scripts="$scripts live-usb-save"
-    [ -e /live/config/save-persist ] && scripts="$scripts persist-autosave"
-    [ -e /live/config/static-root  ] && scripts="$scripts live-static-shutdown"
-
-    run_scripts persist-autosave $scripts
+    do_scripts
 
     safe_get_start_t $pppid || return
     start_t=$START_T
@@ -155,10 +178,10 @@ do_sendsigs() {
 
     #chvt 1
 
-    if list=$(pgrep "$TARDY_LIST"); then
-        msg  "$_Killing_known_tardy_processes_X_" "$white$(echo $list)"
-        kill -KILL $list
-    fi
+    # if list=$(pgrep "$TARDY_LIST"); then
+    #     msg "Killing known tardy processes: %s" "$white$(echo $list)"
+    #     kill -KILL $list
+    # fi
 
     if ! list=$(proc_list $start_t); then
         msg  "$_Almost_all_processes_terminated_immediately_"
@@ -759,6 +782,9 @@ breakpoint() {
     case ,$BREAK_POINTS, in
         *,$1,*) ;;
          *,A,*) ;;
+         *,a,*) ;;
+
+         # This is not used ATM, see line above
          *,a,*) case $1 in
                    [e12345789s])    ;;
                           *) return ;;
