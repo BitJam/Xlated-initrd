@@ -43,7 +43,7 @@
 
           AUFS_DIR="aufs"
 
-       EXTRA_FILES="deb xtra xtra.tgz desktop"
+       EXTRA_FILES="deb xtra xtra.tgz state"
        MIN_SYS_RAM=80
       MIN_AUFS_RAM=80
 
@@ -89,7 +89,7 @@ MKFS_FREE_MARGIN=20
     VFAT_MKFS_SIZES="250 375 500 750 1000 1500 2000 2500 3000 4000"
          MKFS_SIZES="250 375 500 750 1000 1500 2000 2500 3000 4000 5000 6000"
 
-      LIVE_SCRIPTS="live-L10n live-init live-usb-save"
+      LIVE_SCRIPTS="live-L10n live-init"
 
       LAST_BP_TIME=0
 
@@ -185,6 +185,7 @@ main_wrapper() {
 
     [ -e /live/config/persist-root ] && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-password"
     [ -e /live/config/save-persist ] && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-autosave"
+    [ -e /live/config/remasterable ] && LIVE_SCRIPTS="$LIVE_SCRIPTS live-usb-save"
 
     # Do this last so the changes aren't saved until after a "real" persist-save
     [ -e /live/config/systemd ] || LIVE_SCRIPTS="$LIVE_SCRIPTS live-disable-services"
@@ -401,10 +402,12 @@ main_core() {
     [ "$NO_OLD_OUTPUT" ] || old_write_output_files $OUTPUT_DIR
 
     mkdir -p $NEW_ROOT/etc/live
+
     echo $FINAL_DIR > $NEW_ROOT/etc/live/live-dir
 
     # FIXME: since we are using the real persist-save we can do these either
-    # before or after we run the init scripts!
+    # before or after we run the init scripts!  But we lose some of the variables
+    # when not run inside of main_core().
 
     sync
     late_umount $PERSIST_DEVICE
