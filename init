@@ -43,7 +43,7 @@
 
           AUFS_DIR="aufs"
 
-       EXTRA_FILES="deb xtra xtra.tgz desktop"
+       EXTRA_FILES="deb xtra xtra.tgz state"
        MIN_SYS_RAM=80
       MIN_AUFS_RAM=80
 
@@ -89,7 +89,7 @@ MKFS_FREE_MARGIN=20
     VFAT_MKFS_SIZES="250 375 500 750 1000 1500 2000 2500 3000 4000"
          MKFS_SIZES="250 375 500 750 1000 1500 2000 2500 3000 4000 5000 6000"
 
-      LIVE_SCRIPTS="live-L10n live-init live-usb-save"
+      LIVE_SCRIPTS="live-L10n live-init"
 
       LAST_BP_TIME=0
 
@@ -185,6 +185,7 @@ main_wrapper() {
 
     [ -e /live/config/persist-root ] && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-password"
     [ -e /live/config/save-persist ] && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-autosave"
+    [ -e /live/config/remasterable ] && LIVE_SCRIPTS="$LIVE_SCRIPTS live-usb-save"
 
     # Do this last so the changes aren't saved until after a "real" persist-save
     [ -e /live/config/systemd ] || LIVE_SCRIPTS="$LIVE_SCRIPTS live-disable-services"
@@ -401,10 +402,12 @@ main_core() {
     [ "$NO_OLD_OUTPUT" ] || old_write_output_files $OUTPUT_DIR
 
     mkdir -p $NEW_ROOT/etc/live
+
     echo $FINAL_DIR > $NEW_ROOT/etc/live/live-dir
 
     # FIXME: since we are using the real persist-save we can do these either
-    # before or after we run the init scripts!
+    # before or after we run the init scripts!  But we lose some of the variables
+    # when not run inside of main_core().
 
     sync
     late_umount $PERSIST_DEVICE
@@ -413,6 +416,8 @@ main_core() {
     breakpoint 7 "before prepare switch_root"
 
     prepare_switch_root $NEW_ROOT $LIVE_DIR $FINAL_DIR
+
+    write_ntfs_pids $FINAL_DIR/aufs/run/sendsigs.omit.d/initrd-ntfs-3g
 
     echo $LAST_BP_TIME > /LAST_BP_TIME
 }
@@ -862,6 +867,11 @@ do_welcome() {
     vmsg 6 "$cpu_format"  '             Linux kernel' "$(uname -r)"
     vmsg 6 "$cpu_format"  '             Screen width' "$SCREEN_WIDTH"
     vmsg 6 "$cpu_format"  '              Kernel arch' "$(uname -m)"
+
+    local board_name board_vendor id_dir=/sys/class/dmi/id
+    read board_name   2>/dev/null  < $id_dir/board_name
+    read board_vendor 2>/dev/null  < $id_dir/board_vendor
+    vmsg 6 "$cpu_format"  '             Mother board' "$board_vendor $board_name"
 
     # vmsg 6  "$cpu_format" '                      CPU' "$(cpu_param 'model name' unknown)"
     # vmsg 6  "$cpu_format" '                    Cores' "$num_co$(cpu_param 'cpu cores'  1)"
@@ -4203,6 +4213,13 @@ late_umount() {
     cut -d" " -f1 /proc/mounts | grep -q "^$dev$" || return
     msg  "$_late_umount_X_" $(pq $dev)
     log_cmd umount -l $dev
+}
+
+write_ntfs_pids() {
+    local file=$1  ntfs_pids=$(pgrep ntfs-3g)
+    [ "$ntfs_pids" ] || return
+    mkdir -p $(dirname $file)
+    echo "$ntfs_pids" > $file
 }
 
 prepare_switch_root() {
