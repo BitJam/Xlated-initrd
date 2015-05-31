@@ -15,10 +15,9 @@ MSTATE_FILES="
     /var/lib/alsa/asound.state
 "
 GSTATE_FILES="
-    /var/lib/wicd/configuration/*
     /etc/wicd/*.conf
     /etc/NetworkManager/system-connections/*
-    /etc/network/interfaces 
+    /etc/network/interfaces
     /etc/network/interfaces.d/*
 "
 
@@ -253,7 +252,7 @@ mach_id() { cat $ID_DIR/board_* | md5sum | cut -d" " -f1 ;}
 state_files() { echo "$1" | grep -v "^\s*#" | sed "s/\s*#.*//" ;}
 
 # For testing
-echo_cmd() { 
+echo_cmd() {
     [ "$DB_USB_STATE" ] && echo "$@"
     "$@"
 }
