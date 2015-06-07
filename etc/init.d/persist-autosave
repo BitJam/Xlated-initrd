@@ -47,8 +47,8 @@ do_start() {
 
     persist-config --cli --startup --nolog
     [ -e $persist_conf -o -e $new_passwd ] || exit 0
-    [ -e $new_passwd ]   && echo "Save new passwords"
-    [ -e $persist_conf ] && echo "Save new autosave selection"
+    [ -e $new_passwd ]   && echo_live "$_Save_new_passwords_"
+    [ -e $persist_conf ] && echo_live "$_Save_new_autosave_selection_"
 
     persist-save --quiet -cli --nolog
 }
@@ -62,7 +62,6 @@ do_stop() {
     # Don't auto-save twice in a row
     local last_save_file=/live/config/last-auto-save
     if test -r $last_save_file; then
-        local prev=$(cat $last_save_file)
         local diff=$(( $(date +%s) - $(cat $last_save_file)))
         if [ $diff -le $LOCKOUT_TIME ]; then
             echo_live "$_Already_autosaved_X_seconds_ago_" $diff

@@ -183,13 +183,15 @@ main_wrapper() {
 
     breakpoint 8 "before running init.d scripts"
 
-    [ -e /live/config/persist-root ] && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-password"
+    [ -e /live/config/persist-root -o -e /live/config/force-passwd ] \
+                                     && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-password"
     [ -e /live/config/save-persist ] && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-autosave"
     [ -e /live/config/remasterable ] && LIVE_SCRIPTS="$LIVE_SCRIPTS live-usb-save"
 
     # Do this last so the changes aren't saved until after a "real" persist-save
     [ -e /live/config/systemd ] || LIVE_SCRIPTS="$LIVE_SCRIPTS live-disable-services"
 
+    unset CMDLINE
     PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin
     run_init_scripts $NEW_ROOT $LIVE_SCRIPTS
     PATH=$LIVE_BIN
@@ -571,6 +573,8 @@ read_cmdline_params()
                       vtblank=*) valid_int VT_BLANK $param                       ;;
 
                livedir=*|ldir=*) FINAL_DIR=$value                                ;;
+        pw|passwd|pw=*|passwd=*) FORCE_PASSWD=true                               ;;
+              private|private=*) FORCE_PASSWD=true                               ;;
 
         #----- Some known codes -------------------------
 
@@ -4055,6 +4059,7 @@ Initrd_Out
     [ "$PERSIST_ROOT" ]                      && touch $dir/persist-root
     [ "$PERSIST_ROOT" -a -z "$STATIC_ROOT" ] && touch $dir/save-persist
     [ "$PERSIST_ROOT" -a    "$STATIC_ROOT" ] && touch $dir/static-root
+    [ "$FORCE_PASSWD" ]                      && touch $dir/force-passwd
 
     [ -d /sys/class/power_supply ] \
         && grep -q Battery /sys/class/power_supply/*/type 2>/dev/null \
