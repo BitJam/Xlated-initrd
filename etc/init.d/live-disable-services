@@ -22,7 +22,7 @@ LEAN_SERVICES="
     cpufrequtils
     cron
     cups
-    #gpm
+    gpm
     ifplugd
     irqbalance
     loadcpufreq
