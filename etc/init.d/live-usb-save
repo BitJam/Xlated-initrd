@@ -25,6 +25,9 @@ GSTATE_FILES="# File: general-state-files
 /etc/network/interfaces
 /etc/network/interfaces.d/*
 
+/var/log/live/persist-save.log
+/var/log/live/live-remaster.log
+
 # /etc/passwd
 # /etc/shadow
 # /etc/group
@@ -81,7 +84,9 @@ do_start() {
 
     # Only restore general state files and user files if root persistence is not
     # enabled
-    test -e /live/config/persist-root && return
+    # Not saving state when I enable persistence was a pain.
+    # We'll see.  Maybe just restore it the first time?!
+    #test -e /live/config/persist-root && return
 
     restore_state $root_dir/$GSTATE_DIR "$(state_files "$GSTATE_FILES")"
 
@@ -218,6 +223,10 @@ save_state() {
 
     # Save system files under state_dir
     for file in $files; do
+
+        # Don't save from /live
+        [ -z "${file##/live/*}" ] && continue
+
         local from=$file
         local to=$state_dir/files$file
         should_copy $from $to || continue
@@ -252,6 +261,10 @@ restore_state() {
         # Copy saved state files to system
         for from in $(find $state_dir/files -type f 2>/dev/null); do
             local to=${from#$state_dir/files}
+
+            # Don't write to /live
+            [ -z "${to##/live/*}" ] && continue
+
             should_copy $from $to || continue
             echo_live "$_restore_state_file_X_" $(pquote $to)
             echo_cmd mkdir -p $(dirname $to)
