@@ -20,6 +20,7 @@ _Localizing_menus_to_X_in_Y_="Τοπικοποίηση του μενοϋ σε %s
 _Localizing_source_repos_using_X_="Τοπικοποίηση του repos %s"
 _Mounting_all_devices_="Τοποθέτηση όλων των συσκευών"
 _Mounting_usb_devices_="Τοποθέτηση συσκευών USB"
+_No_default_user_X_found_on_the_system_="Προεπιλεγμένο χρήστης %s δε βρέθηκε στο σύστημα."
 _Not_creating_or_populating_X_="Δε γίνεται δημιουργία ή εποίκηση του %s"
 _Populating_X_directory_="Εποίκηση κατάλογο %s"
 _Removing_previous_auto_generated_X_file_="Αφαίρεση προηγούμενο αρχείο %s "
