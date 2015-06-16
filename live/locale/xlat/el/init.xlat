@@ -69,6 +69,7 @@ _X_mismatch_between_Y_and_Z_="αναντιστοιχία μεταξύ %s και%
 _You_must_answer_X_or_Y_Please_try_again_="Πρέπει να απαντήσετε %s ή %s. Παρακαλώ δοκιμάστε ξανά"
 _continue_="συνεχίστε"
 _copy_X_file_to_RAM_="να θέσει το αρχείο %s στη μνήμη RAM"
+_copy_X_to_Y_="αντιγραφή %s σε %s"
 _default_="προεπιλογή"
 _dont_take_this_too_seriously_="(Μην πάρετε αυτό στα σοβαρά)"
 _file_X_="             αρχείο"
