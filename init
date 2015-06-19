@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.20.00"
-           VERSION_DATE="Sun May 31 03:54:15 MDT 2015"
+                VERSION="7.20.04"
+           VERSION_DATE="Thu Jun 18 19:39:52 MDT 2015"
               DEVELOPER="BitJam"
   DISTRO_BUG_REPORT_URL="http://antix.freeforums.org"
 
@@ -185,11 +185,12 @@ main_wrapper() {
 
     breakpoint 8 "before running init.d scripts"
 
+    # Try running live-usb-save first so it can restore an xorg.conf machine-state file
+    [ -e /live/config/remasterable ] && LIVE_SCRIPTS="live-usb-save $LIVE_SCRIPTS"
+
     [ -e /live/config/persist-root -o -e /live/config/force-passwd ] \
                                      && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-password"
     [ -e /live/config/save-persist ] && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-autosave"
-    [ -e /live/config/remasterable ] && LIVE_SCRIPTS="$LIVE_SCRIPTS live-usb-save"
-
     # Do this last so the changes aren't saved until after a "real" persist-save
     [ -e /live/config/systemd ] || LIVE_SCRIPTS="$LIVE_SCRIPTS live-disable-services"
 
