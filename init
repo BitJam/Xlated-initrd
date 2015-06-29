@@ -189,11 +189,9 @@ main_wrapper() {
     confile remasterable && LIVE_SCRIPTS="live-usb-save $LIVE_SCRIPTS"
     confile persist-root force-passwd && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-password"
     confile save-persist && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-autosave"
-
     # Do this after the above so the changes aren't saved until after a "real" persist-save
-    confile systemd     || LIVE_SCRIPTS="$LIVE_SCRIPTS live-disable-services"
-
-    confile toram-eject && LIVE_SCRIPTS="$LIVE_SCRIPTS live-toram-eject"
+    confile systemd      || LIVE_SCRIPTS="$LIVE_SCRIPTS live-disable-services"
+    confile toram-eject  && LIVE_SCRIPTS="$LIVE_SCRIPTS live-toram-eject"
 
     unset CMDLINE
     PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin
@@ -547,7 +545,7 @@ read_cmdline_params()
                autologin|alogin) DO_AUTO_LOGIN=true                              ;;
 
                           toram) TO_RAM=true                                     ;;
-                    toram-eject) TO_RAM=true ; TO_RAM_EJECT=true                 ;;
+                    #toram-eject) TO_RAM=true ; TO_RAM_EJECT=true                 ;;
 
                      noremaster) NO_REMASTER=true                                ;;
                        rollback) ROLLBACK=true                                   ;;
@@ -3141,11 +3139,15 @@ copy_to_ram() {
         SQFILE_DIR=$toram_mp
         SQFILE_FULL=$toram_mp/$name
         DEFAULT_DIR=$SQFILE_DIR
+
+        log_cmd umount $SQFS_MP
+        mount_linuxfs "$SQFS_MP" "$SQFILE_FULL"
+
     else
-        breakpoint c "After toram copy file error"
         mountpoint -q $toram_mp && log_cmd umount $toram_mp
         [ -d $toram_mp ]        && rmdir $toram_mp
     fi
+    breakpoint tr "After copy to ram"
 }
 
 _copy_to_ram() {
@@ -4229,8 +4231,8 @@ late_umount() {
     local dev=$1
     [ "$dev" ] || return
 
-    # It does not suffice to only disable the liveCD (see below)
-    [ "$TO_RAM_EJECT" ] || return
+    ## It does not suffice to only disable the liveCD (see below)
+    #[ "$TO_RAM_EJECT" ] || return
 
     local dep
     for dep in $HOMEFS_DEV $ROOTFS_DEV $LINUXFS_DEV; do
@@ -4240,15 +4242,20 @@ late_umount() {
     # Don't umount if not mounted
     cut -d" " -f1 /proc/mounts | grep -q "^$dev$" || return
 
-    if [ -z "$TO_RAM_EJECT" ]; then
-        case $(stat -c %t $dev) in
-            b) msg 'Will not late umount cd/dvd device %s' $(pq $dev)
-               return ;;
-        esac
-    fi
+    # if [ -z "$TO_RAM_EJECT" ]; then
+    #     case $(stat -c %t $dev) in
+    #         b) msg 'Will not late umount cd/dvd device %s' $(pq $dev)
+    #            return ;;
+    #     esac
+    # fi
 
     msg  "$_late_umount_X_" $(pq $dev)
-    log_cmd umount -l $dev
+    for i in $(seq 1 5); do
+        log_cmd umount $dev 2>/dev/null
+        cut -d" " -f1 /proc/mounts | grep -q "^$dev$" || return
+        usleep 500000
+    done
+    err  "$_late_umount_of_X_failed_" $(pqe $dev)
 }
 
 write_ntfs_pids() {
