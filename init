@@ -4250,7 +4250,7 @@ late_umount() {
     # fi
 
     msg  "$_late_umount_X_" $(pq $dev)
-    log_cmd umount -l $dev
+    log_cmd umount $dev
 }
 
 write_ntfs_pids() {
