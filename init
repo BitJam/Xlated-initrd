@@ -186,13 +186,14 @@ main_wrapper() {
     breakpoint 8 "before running init.d scripts"
 
     # Try running live-usb-save first so it can restore an xorg.conf machine-state file
-    [ -e /live/config/remasterable ] && LIVE_SCRIPTS="live-usb-save $LIVE_SCRIPTS"
+    confile remasterable   && LIVE_SCRIPTS="live-usb-save $LIVE_SCRIPTS"
+    ! confile persist-root || ! confile force-passwd || LIVE_SCRIPTS="$LIVE_SCRIPTS persist-password"
+    confile save-persist   && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-autosave"
 
-    [ -e /live/config/persist-root -o -e /live/config/force-passwd ] \
-                                     && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-password"
-    [ -e /live/config/save-persist ] && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-autosave"
-    # Do this last so the changes aren't saved until after a "real" persist-save
-    [ -e /live/config/systemd ] || LIVE_SCRIPTS="$LIVE_SCRIPTS live-disable-services"
+    # Do this after the above so the changes aren't saved until after a "real" persist-save
+    confile systemd        || LIVE_SCRIPTS="$LIVE_SCRIPTS live-disable-services"
+
+    confile toram-eject    && LIVE_SCRIPTS="$LIVE_SCRIPTS live-toram-eject"
 
     unset CMDLINE
     PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin
@@ -546,6 +547,7 @@ read_cmdline_params()
                autologin|alogin) DO_AUTO_LOGIN=true                              ;;
 
                           toram) TO_RAM=true                                     ;;
+                    toram-eject) TO_RAM=true ; TO_RAM_EJECT=true                 ;;
 
                      noremaster) NO_REMASTER=true                                ;;
                        rollback) ROLLBACK=true                                   ;;
@@ -1797,12 +1799,12 @@ try_mount() {
     local type=$(blkid $dev | sed -n -r 's/.* TYPE="([^"]*)"$/\1/p' | tail -n 1)
     [ "$type" ] || return 1
     case $type in
-        ext[234]) mount -t $type -o $rw,noatime                           $dev "$mp" 2>/dev/null ;;
-            vfat) mount -t vfat -o $rw,umask=000,shortname=winnt,noatime  $dev "$mp" 2>/dev/null ;;
-         iso9660) mount -t iso9660 -o ro                                  $dev "$mp" 2>/dev/null ;;
-            ntfs) ntfs-3g -o umask=000,force,$rw,noatime                  $dev "$mp" 2>/dev/null 17>/dev/null || \
-                  mount -t ntfs -o umask=000,ro                           $dev "$mp" 2>/dev/null ;;
-               *) mount -t $type -o $rw,noatime                           $dev "$mp" 2>/dev/null ;;
+        ext[234]) log_cmd mount -t $type -o $rw,noatime                           $dev "$mp" 2>/dev/null ;;
+            vfat) log_cmd mount -t vfat -o $rw,umask=000,shortname=winnt,noatime  $dev "$mp" 2>/dev/null ;;
+         iso9660) log_cmd mount -t iso9660 -o ro                                  $dev "$mp" 2>/dev/null ;;
+            ntfs) log_cmd ntfs-3g -o umask=000,force,$rw,noatime                  $dev "$mp" 2>/dev/null 17>/dev/null || \
+                  log_cmd mount -t ntfs -o umask=000,ro                           $dev "$mp" 2>/dev/null ;;
+               *) log_cmd mount -t $type -o $rw,noatime                           $dev "$mp" 2>/dev/null ;;
     esac
     return $?
 }
@@ -4009,6 +4011,12 @@ chroot_umount() {
     return 1
 }
 
+confile() {
+    local file=$1 dir=${2:-/live/config}
+    test -e $dir/$file
+    return $?
+}
+
 write_output_files() {
     local dir=$1  out_file=$1/initrd.out
     mkdir -p $dir
@@ -4067,6 +4075,9 @@ Initrd_Out
     [ "$PERSIST_ROOT" -a -z "$STATIC_ROOT" ] && touch $dir/save-persist
     [ "$PERSIST_ROOT" -a    "$STATIC_ROOT" ] && touch $dir/static-root
     [ "$FORCE_PASSWD" ]                      && touch $dir/force-passwd
+
+    [ "$DID_TORAM" ] && [ "$(stat -c %t $SQFILE_DEV)" = b ] \
+        && echo "BOOT_DEV=$SQFILE_DEV" > $dir/toram-eject
 
     [ -d /sys/class/power_supply ] \
         && grep -q Battery /sys/class/power_supply/*/type 2>/dev/null \
@@ -4216,6 +4227,9 @@ late_umount() {
     local dev=$1
     [ "$dev" ] || return
 
+    # It does not suffice to only disable the liveCD (see below)
+    [ "$TO_RAM_EJECT" ] || return
+
     local dep
     for dep in $HOMEFS_DEV $ROOTFS_DEV $LINUXFS_DEV; do
         [ "$dep" = "$dev" ] && return
@@ -4223,6 +4237,14 @@ late_umount() {
 
     # Don't umount if not mounted
     cut -d" " -f1 /proc/mounts | grep -q "^$dev$" || return
+
+    if [ -z "$TO_RAM_EJECT" ]; then
+        case $(stat -c %t $dev) in
+            b) msg 'Will not late umount cd/dvd device %s' $(pq $dev)
+               return ;;
+        esac
+    fi
+
     msg  "$_late_umount_X_" $(pq $dev)
     log_cmd umount -l $dev
 }

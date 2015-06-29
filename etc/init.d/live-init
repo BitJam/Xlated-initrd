@@ -123,14 +123,14 @@ do_start() {
 
     DEF_USER=$(find_def_user)
 
-    USER_HOME=$(getent passwd "$DEF_USER" | cut -d: -f6)
+    eval "USER_HOME=~$DEF_USER"
 
-    if [ -z "$USER_HOME" ]; then
+    if [ -z "$DEF_USER" -o -z "${USER_HOME##~*}" ]; then
         echo_live "$_No_default_user_X_found_on_the_system_" "$(pquote $DEF_USER)"
         return
     fi
 
-    create_home $DEF_USER $USER_HOME
+    create_home "$DEF_USER" "$USER_HOME"
 
     # Don't bother with desktop stuff on systems without X
     #--------------------------------------------------------------------------
@@ -536,7 +536,7 @@ create_home() {
 
     echo_live "$_Populating_X_directory_" $(pquote $home)
     mkdir -p $home
-    cp -a /etc/skel/* /etc/skel/.[^.]* $home 2>/dev/null # Avoid error msgs for ".../* not found"
+    cp -a /etc/skel/* /etc/skel/.[!.]* $home 2>/dev/null # Avoid error msgs for ".../* not found"
 
     local group=users
     grep -q "^$user:" /etc/group && group=$user
