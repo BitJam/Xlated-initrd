@@ -60,7 +60,7 @@ me=${0##*/}
      OLD_ROOT=/aufs
   BUSYBOX_BIN=$NEW_ROOT/bin
    LOCALE_DIR=/locale
- CMDLINE_FILE=/live/CMDLINE
+ CMDLINE_FILE=/live/config/cmdline
 HIJACKED_INIT=/hijacked-init
  PROTECT_LIST="^(/sbin/mount.ntfs|mount.ntfs|mount.fuse|mount.cifs|ntfs-3g|/sbin/mount.ntfs-3g|rpcbind)$"
    TARDY_LIST="^(acpid)$"
@@ -110,10 +110,10 @@ do_scripts() {
     # Make sure we have a fresh line to print out on
     # echo
 
-    find_mounted_cd $BOOT_DEV_FILE
+    #find_mounted_cd $BOOT_DEV_FILE
 
     local scripts=
-    [ -z "$TO_EJECT"               ] && scripts="$scripts live-usb-save"
+    [ -e /live/config/remasterable ] && scripts="$scripts live-usb-save"
     [ -e /live/config/save-persist ] && scripts="$scripts persist-autosave"
     [ -e /live/config/static-root  ] && scripts="$scripts live-static-shutdown"
 
@@ -327,7 +327,7 @@ final_umount() {
 
 read_cmdline() {
     if [ -r $CMDLINE_FILE ]; then
-        CMDLINE=$(cat $CMDLINE_FILE)
+        CMDLINE=$(cat $CMDLINE_FILE /proc/cmdline)
         FROM_FILE=true
     else
         CMDLINE=$(cat /proc/cmdline)
