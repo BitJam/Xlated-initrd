@@ -388,8 +388,9 @@ make_xorg_conf() {
       "VESA VGA") vga_fb=true ;;
        "EFI VGA") if [ "$safe_mode" ]; then
                     echo_live "$_Disabling_safe_mode_because_of_X_" $(pquote EFI framebuffer)
+                    no_default=true
                     safe_mode=
-                fi ;;
+                  fi ;;
     esac
 
     # Force X video driver to be vesa if the vga framebuffer is enabled.
@@ -454,6 +455,7 @@ load_video_driver() {
         set_fbcondecor "$SPLASH_PARAM" "$orig_fb_name"
     else
         echo_live "$_Found_video_module_s_X_" "$(pquote $(echo $video_modules))"
+        detect_sisimedia_driver "$video_modules"
     fi
 }
 
@@ -466,8 +468,11 @@ detect_any_video_driver() {
     [ "$video_modules" ] || return
 
     FOUND_VDRIVER=true
-    detect_sisimedia_driver "$video_modules"
+
+    local kms_modules="$(echo "$video_modules" | egrep "^($KMS_VIDEO_MODULES)$")"
+
     echo_live "$_Found_X_video_module_s_Y_" "" "$(pquote $(echo $video_modules))"
+    [ "$kms_modules" ] || detect_sisimedia_driver "$video_modules"
 }
 
 # Note: we will report FOUND_VDRIVER even if "nomodeset" is used because unless
@@ -486,7 +491,12 @@ detect_sisimedia_driver() {
     echo_live "$_Found_sis_kernel_modules_"
     test -e $XORG_DRIVER_DIR/${xorg_driver}_drv.so || return
     echo_live "$_found_xorg_driver_xorg_driver_"
-    XORG_ARGS="default,$xorg_driver${XORG_ARGS:+,$XORG_ARGS}"
+
+    # Add "default" only if there is no previous XORG_ARGS
+    # Always add the "sisimedia" driver
+    # But both come *before* the orignal XORG_ARGS so they get over-ridden
+    # by the xorg= cheat.
+    XORG_ARGS="${XORG_ARGS:-default,$xorg_driver}"
 }
 
 set_dpi() {
