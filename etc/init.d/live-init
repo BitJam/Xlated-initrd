@@ -21,8 +21,8 @@ export PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin
     EARLY_VID=
 FOUND_VDRIVER=
 
-ALL_VIDEO_MODULES="ast|bochs[_-]drm|cirrus|emgd|gma500[_-]gfx|i810|i915|mga|mgag200|nouveau|nvidia|qxl|r128|radeon|savage|sis|sis[_-]agp|tdfx|via|via[_-]agp|vmwgfx"
-KMS_VIDEO_MODULES="ast|bochs[_-]drm|cirrus|emgd|gma500[_-]gfx|i915|mgag200|nouveau|qxl|radeon|udl|vmwgfx"
+ALL_VIDEO_MODULES="ast|bochs[_-]drm|cirrus|emgd|gma500[_-]gfx|i810|i915|mga|mgag200|nouveau|nvidia|qxl|r128|radeon|savage|sis|sis[_-]agp|tdfx|vboxvideo|via|via[_-]agp|vmwgfx"
+KMS_VIDEO_MODULES="ast|bochs[_-]drm|cirrus|emgd|gma500[_-]gfx|i915|mgag200|nouveau|qxl|radeon|udl|vboxvideo|vmwgfx"
 SISIMEDIA_K_DRIVERS="sis|sis[_-]agp"
 XORG_DRIVER_DIR="/usr/lib/xorg/modules/drivers"
 
@@ -377,21 +377,24 @@ make_xorg_conf() {
     [ "$found_vdriver" ]           && no_default=true
     [ -e /live/config/virtualbox ] && no_default=true
 
-    # safe mode from the user over-rides vbox-a -z "$args"  mode
-    [ -z "$safe_mode" -a -e /live/config/virtualbox -a -z "$args" ] && args=vbox${args:+,}$args
+    # FIXME: should I include this or does check for "EFI VGA" below suffice?
+    #[ -e /live/config/uefi ]       && no_default=true
 
     # Check who is creating the framebuffer (in any)
     local vga_fb fb_name=none
     read fb_name 2>/dev/null < /sys/class/graphics/fb0/name
 
     case $fb_name in
+            none) ;;
       "VESA VGA") vga_fb=true ;;
-       "EFI VGA") if [ "$safe_mode" ]; then
-                    echo_live "$_Disabling_safe_mode_because_of_X_" $(pquote EFI framebuffer)
-                    no_default=true
-                    safe_mode=
-                  fi ;;
+     "EFI VGA"|*) echo_live "$_Disabling_safe_mode_because_of_X_" $(pquote $fb_name framebuffer)
+                  no_default=true
+                  safe_mode= ;;
     esac
+
+    # safe mode from the user over-rides vbox
+    [ -z "$safe_mode" -a -e /live/config/virtualbox -a -z "$args" -a -z "$no_default" ] \
+        && args=vbox${args:+,}$args
 
     # Force X video driver to be vesa if the vga framebuffer is enabled.
     if  [ "$vga_fb" -a -z "$no_default" -a -z "$safe_mode" ]; then
