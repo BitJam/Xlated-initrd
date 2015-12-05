@@ -176,11 +176,11 @@ main_wrapper() {
     else
         # Evaluate redirects RIGHT TO LEFT:
         #
-        #  stdout  1 -------\        /---> while, sed, tee ---> screen
+        #  stdout  1 -------+        +---> while, sed, tee ---> screen (stdout)
         #                    \      /
-        #  stderr  2 ---\     \----/--------------------------> screen
+        #  stderr  2 ---+     `----/--------------------------> screen (stderr)
         #                \        /
-        #         17      \------/
+        #         17      `------'
 
         main_core  17>&1  1>&2  2>&17  | while read line; do echo "$line" \
             | sed -e "s/^/${yellow}Error: $red/" -e "s/$/$nc_co/" | tee -a $MY_LOG; done
@@ -496,7 +496,7 @@ read_cmdline_params()
         value=${param#*=}
 
         case $param in
-                          menus) DO_MENUS=ltopd                                  ;;
+                          menus) DO_MENUS=${MENUS_LIST:-ltopd}                   ;;
                         menus=*) DO_MENUS=$DO_MENUS$value                        ;;
                        old-conf) NO_NEW_OUTPUT=true                              ;;
                        new-conf) NO_OLD_OUTPUT=true                              ;;
@@ -2460,7 +2460,7 @@ my_select_menu() {
 
 
 do_menus() {
-    local BOOT_MENU_DIR=/live/menus
+    local BOOT_MENU_DIR=/live/custom/$DISTRO_NAME/menus
     local BOOT_MENU_WARN=true
     local lang time_zone option persist desktop
     local cmdline
