@@ -69,9 +69,6 @@ set_hwclock() {
 
     #grep -i -q $new $file && return
 
-    # FIXME!
-    return
-
     case $new in
         local) sed -i 's/^UTC\s*$/LOCAL/' $file
                hwclock --hctosys --localtime      ;;
@@ -83,7 +80,7 @@ set_hwclock() {
 ask_hwclock() {
     local green=$GREEN white=$WHITE cyan=$CYAN nc_co=$NO_COLOR hi_co=$WHITE
     local bold_co=$AMBER  cheat_co=$WHITE
-    
+
     echo
     check_timezone || return
     check_hwclock
@@ -92,9 +89,8 @@ ask_hwclock() {
 check_hwclock() {
 
     # Get current default locale
+    local locale_file=/etc/default/locale
     test -r $locale_file && . $locale_file
-    # But let the user over-ride it from the bootloader
-    LANG=${CMD_LANG:-$LANG}
 
     local utc_en=$(get_hwclock --utc)
     local loc_en=$(get_hwclock --localtime)
@@ -122,10 +118,10 @@ check_hwclock() {
         echo_live "$_They_both_say_the_current_time_is_X_" "$(pquote $loc_str)"
         yes_no_quit "Would you like to set the hardware clock manually to UTC or localtime" \
             && manual_set_hwclock
-        
+
     elif [ $diff_utc_loc -lt $MARGIN ]; then
         echo_live "$_Your_local_timezone_and_the_UTC_timezone_are_currently_close_but_not_the_same_"
-        echo_live "$_FIXME_They_both_say_the_current_time_is_X_" "$(pquote $loc_str)"
+        echo_live "$_They_both_say_the_current_time_is_within_15_minutes_of_X_" "$(pquote $loc_str)"
         yes_no_quit "Would you like to set the hardware clock manually to UTC or localtime" \
             && manual_set_hwclock
     else
@@ -138,7 +134,7 @@ check_hwclock() {
     #     true:true) FIXME          ;;
     #             :) do_neither     ;;
     # esac
-}   
+}
 
 guess_hwclock() {
     local utc_str=$1  loc_str=$2
@@ -147,18 +143,18 @@ guess_hwclock() {
     echo_live "$_Help_us_figure_out_what_time_is_used_by_your_hardware_clock_"
     echo_live "$_by_telling_us_if_either_setting_produces_the_correct_time_"
     local select_data=$(cat <<Select_Data
-0:utc
-1:local
-2:neither
-3:both
+1:utc
+2:local
+3:neither
+4:both
 Select_Data
 )
 
     local select_menu=$(cat <<Select_Menu
-  0:   UTC: $(bold $utc_str) is within 10 minutes of the correct time.
-  1: Local: $(bold $loc_str) is within 10 minutes of the correct time.
-  2: Neither are within 10 minutes of the correct time.
-  3: Both are within 10 minutes of the correct time.
+  1:   UTC: $(bold $utc_str) is within 10 minutes of the correct time.
+  2: Local: $(bold $loc_str) is within 10 minutes of the correct time.
+  3: Neither are within 10 minutes of the correct time.
+  4: Both are within 10 minutes of the correct time.
 Select_Menu
 )
 
@@ -169,8 +165,8 @@ Select_Menu
 
     case $answer in
         local|utc) set_hwclock $answer ;;
-          neither)                     ;;
-             both)                     ;;
+          neither) do_neither          ;;
+             both) do_both             ;;
                 *) error "$_Got_a_strange_answer_from_guess_hwclock_menu_X_" "$answer" ;;
     esac
 }
@@ -192,7 +188,7 @@ check_timezone() {
         local ret=$?
         case $ret in
              0) if [ "$orig_tz" != "$TZ" ]; then
-                    echo "echo $TZ > $TZ_FILE"
+                    echo $TZ > $TZ_FILE
                     export TZ
                 fi
                 return 0     ;;
@@ -236,20 +232,58 @@ yes_no_quit() {
 
     while true; do
         echo -e "$title?"
-        printf "$fmt" 0 "yes"
-        printf "$fmt" 1 "no"
-        printf "$fmt" 2  "quit"
-        printf "$GREEN%s \"%s\" >$NO_COLOR " "Please enter a number.  Default is" "yes" 
+        printf "$fmt" 1 "yes"
+        printf "$fmt" 2 "no"
+        printf "$fmt" 3  "quit"
+        printf "$GREEN%s \"%s\" >$NO_COLOR " "Please enter a number.  Default is" "yes"
 
         read ans
         case $ans in
-                   2) exit 0           ;;
-            [012]|"") return ${ans:-0} ;;
+                   3) exit 0              ;;
+                [12]) return $((ans - 1)) ;;
+                  "") return 0            ;;
         esac
 
         error "$(printf "%s $ERROR_PARAM_COLOR%s" "You must enter 0, 1, or 2." "Press <enter>")"
         read ans
     done
+}
+
+do_both() {
+    echo_live "$_This_is_an_unusual_situation_"
+    yes_no_quit "Would you like to set the hardware clock manually to UTC or local time" \
+        && manual_set_hwclock
+}
+
+do_neither() {
+    echo_live "$_Either_your_timezone_is_incorrect_or_your_hardware_clock_is_incorrect_or_both_"
+    echo_live "$_It_seems_your_hardware_clock_is_not_set_to_local_time_or_to_UTC_time_"
+    echo_live "$_You_need_to_set_your_system_time_and_then_set_your_hardware_clock_"
+    echo_live
+    echo_live "$_Press_enter_to_continue_"
+    local ans
+    read ans
+}
+
+manual_set_hwclock() {
+    local title="Is your hardware clock set to UTC time or local time?"
+    local manual_menu=$(cat <<Manual_Menu
+ 1) UTC
+ 2) local time
+ 3) Get me out of here!
+Manual_Menu
+)
+    local manual_data=$(cat <<Manual_Data
+1:utc
+2:local
+3:quit
+Manual_Data
+)
+
+    local answer
+    my_select_2 "$title" "answer" "" "$manual_data" "$manual_menu"
+    #echo "answer=$answer"
+    set_hwclock $answer
 }
 
 my_select_menu() {
