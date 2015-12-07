@@ -1,8 +1,10 @@
 # File: /live/custom/antiX/0.sh
-# antiX Specific /init code
+# MX Specific /init code
 
 LIST_MODULES=true
 CHECK_BOOTCODES=true
+
+MENUS_LIST=ltop
 
 DO_DEB=true
 DO_FSCK=true
@@ -28,7 +30,7 @@ live_param_filter() {
 
         # Our Live params
         hwclock=utc|hwclock=local|xorg|xorg=*|noearlyvid|earlyvid) ;;
-        confont=*|conkeys=*);;
+        confont=*|conkeys=*|conkbd=*);;
         dpi=*|hostname=*|kbd=*|kbopt=*|kbvar=*);;
         lang=*|mirror=*|noloadkeys|noprompt);;
         nosplash|password|password=*|prompt|pw|pw=*|tz=*|ubp=*|ushow=*);;

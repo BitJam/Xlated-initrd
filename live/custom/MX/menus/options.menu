@@ -1,0 +1,11 @@
+  1) none
+  2) checkmd5
+  3) checkfs
+  4) toram
+  5) from=usb
+  6) hwclock=utc
+  7) hwclock=local
+  8) private
+  9) savestate
+ 10) nosavestate
+ 11) nousb2
