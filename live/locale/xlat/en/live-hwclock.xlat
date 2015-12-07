@@ -4,6 +4,7 @@ _Either_your_timezone_is_incorrect_or_your_hardware_clock_is_incorrect_or_both_=
 _Got_a_strange_answer_from_guess_hwclock_menu_X_="Got a strange answer from guess hwclock menu %s"
 _Help_us_figure_out_what_time_is_used_by_your_hardware_clock_="Help us figure out what time is used by your hardware clock"
 _It_seems_your_hardware_clock_is_not_set_to_local_time_or_to_UTC_time_="It seems your hardware clock is not set to local time or to UTC time."
+_Please_wait_while_we_examine_the_hardware_clock_="Please wait while we examine the hardware clock ..."
 _Press_enter_to_continue_="Press <enter> to continue"
 _They_both_say_the_current_time_is_X_="They both say the current time is %s"
 _They_both_say_the_current_time_is_within_15_minutes_of_X_="They both say the current time is within 15 minutes of %s"
