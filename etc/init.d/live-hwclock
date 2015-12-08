@@ -56,7 +56,7 @@ do_start() {
    echo_script "$_Configuring_Hardware_Clock_" $0
 
    mountpoint -q /live/aufs || PRETEND_MODE=true
-   [ "$PRETEND_MODE" ] && echo_live "${AMBER}Pretend mode enabled"
+   [ "$PRETEND_MODE" ] && echo_live "${YELLOW}Pretend mode enabled"
 
     case $CMD_CLOCK in
         local|utc) set_hwclock $CMD_CLOCK ;;
@@ -83,7 +83,7 @@ set_hwclock() {
 
 ask_hwclock() {
     local green=$GREEN white=$WHITE cyan=$CYAN nc_co=$NO_COLOR hi_co=$WHITE
-    local bold_co=$AMBER  cheat_co=$WHITE
+    local bold_co=$YELLOW  cheat_co=$WHITE
 
     echo
     check_timezone || return
@@ -101,10 +101,11 @@ check_timezone() {
         yes_no_quit "$LIVE_COLOR$(printf "Is %s your current timezone" "$(pquote $TZ)")"
         local ret=$?
         case $ret in
-             0)  echo "orig: $orig_tz   new: $TZ"
-                 if [ "$orig_tz" != "$TZ" ]; then
+             0) if [ "$orig_tz" != "$TZ" ]; then
                     export TZ
                     pretend write_to_file $TZ_FILE $TZ
+                    # For localizing repos in live-init
+                    pretend append_file /live/config/cmdline "tz=$TZ"
                 fi
                 return 0     ;;
              1) set_timezone ;;
@@ -288,8 +289,8 @@ my_select_menu() {
     [ -z "${menu##*$cheat*}" ] || return
 
     if [ ! -e $dfile -o  ! -e $mfile ]; then
-        [ "$BOOT_MENU_WARN" ] && warn "Missing $dfile or $mfile"
-        return
+        error "$_Missing_dfile_or_mfile_"
+        exit 2
     fi
 
     local menu_value
@@ -372,6 +373,20 @@ show_time() { echo_live "$_X_START_PARAM_Y_" "$1" "$2"; }
 show_unix() { echo_live "$_X_Unix_START_PARAM_Y_" "$1" "$2" ; }
 
 debug() { [ ${#db_hwc} -gt 0 ] && echo "$*"; }
+
+write_to_file() {
+    local file=$1
+    local dir=$(dirname $file)
+    mkdir -p $dir
+    echo -e "$*" > $file
+}
+
+append_file() {
+    local file=$1
+    local dir=$(dirname $file)
+    mkdir -p $dir
+    echo -e "$*" >> $file
+}
 
 pretend() {
     if [ "$PRETEND_MODE" ]; then
