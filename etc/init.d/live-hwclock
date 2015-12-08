@@ -27,6 +27,7 @@ for param in $CMDLINE; do
                    tz=*) export TZ=$value  ;;
         hwclock=*|hwc=*) CMD_CLOCK=$value  ;;
                  lang=*) CMD_LANG=$value   ;;
+                pretend) PRETEND_MODE=true ;;
     esac
 done
 
@@ -54,6 +55,9 @@ do_start() {
 
    echo_script "$_Configuring_Hardware_Clock_" $0
 
+   mountpoint -q /live/aufs || PRETEND_MODE=true
+   [ "$PRETEND_MODE" ] && echo_live "${AMBER}Pretend mode enabled"
+
     case $CMD_CLOCK in
         local|utc) set_hwclock $CMD_CLOCK ;;
               ask) ask_hwclock            ;;
@@ -70,10 +74,10 @@ set_hwclock() {
     #grep -i -q $new $file && return
 
     case $new in
-        local) sed -i 's/^UTC\s*$/LOCAL/' $file
-               hwclock --hctosys --localtime      ;;
-          utc) sed -i 's/^LOCAL\s*$/UTC/' $file
-               hwclock --hctosys --utc            ;;
+        local) pretend sed -i 's/^UTC\s*$/LOCAL/' $file
+               pretend hwclock --hctosys --localtime      ;;
+          utc) pretend sed -i 's/^LOCAL\s*$/UTC/' $file
+               pretend hwclock --hctosys --utc            ;;
     esac
 }
 
@@ -86,9 +90,45 @@ ask_hwclock() {
     check_hwclock
 }
 
-check_hwclock() {
+check_timezone() {
+    test -r $TZ_FILE || fatal "Could not find file %s" $(pquote $TZ_FILE)
+    local orig_tz
+    read orig_tz 2>/dev/null <$TZ_FILE
+    : ${TZ:=$orig_tz}
+    [ ${#TZ} -eq 0 ] && fatal "No timezone found in file %s" $(pquote $TZ_FILE)
 
+    while true ; do
+        yes_no_quit "$LIVE_COLOR$(printf "Is %s your current timezone" "$(pquote $TZ)")"
+        local ret=$?
+        case $ret in
+             0)  echo "orig: $orig_tz   new: $TZ"
+                 if [ "$orig_tz" != "$TZ" ]; then
+                    export TZ
+                    pretend write_to_file $TZ_FILE $TZ
+                fi
+                return 0     ;;
+             1) set_timezone ;;
+             2) return 1     ;;
+        esac
+    done
+}
+
+set_timezone() {
+    local DISTRO distro_file=/live/config/distro
+    test -r distro_file && read DISTRO 2>/dev/null $distro_file
+    : ${DISTRO:=MX}
+
+    local BOOT_MENU_DIR=/live/custom/$DISTRO/menus DO_MENUS=t
+    my_select_menu "Select Timezone" "Timezones are listed geographically" t timezone
+    local tz=${timezone#tz=}
+    [ "$tz" = "default" ] && tz=$TZ
+    TZ=$tz
+}
+
+check_hwclock() {
     # Get current default locale
+    echo_live
+    echo_live "$_Please_wait_while_we_examine_the_hardware_clock_"
     local locale_file=/etc/default/locale
     test -r $locale_file && . $locale_file
 
@@ -127,18 +167,10 @@ check_hwclock() {
     else
         guess_hwclock "$utc_str" "$loc_str"
     fi
-
-    # case $found_utc:$found_loc in
-    #         true:) do_found utc   ;;
-    #         :true) do_found local ;;
-    #     true:true) FIXME          ;;
-    #             :) do_neither     ;;
-    # esac
 }
 
 guess_hwclock() {
     local utc_str=$1  loc_str=$2
-    echo_live
     echo_live "$_Your_local_time_is_UTC_time_X_" $tz_offset2
     echo_live "$_Help_us_figure_out_what_time_is_used_by_your_hardware_clock_"
     echo_live "$_by_telling_us_if_either_setting_produces_the_correct_time_"
@@ -171,101 +203,9 @@ Select_Menu
     esac
 }
 
-show_time() { echo_live "$_X_START_PARAM_Y_" "$1" "$2"; }
-show_unix() { echo_live "$_X_Unix_START_PARAM_Y_" "$1" "$2" ; }
-
-get_hwclock() { LANG=en_US.UTF-8 hwclock --show $* | sed 's/  .*//'; }
-
-check_timezone() {
-    test -r $TZ_FILE || fatal "Could not find file %s" $(pquote $TZ_FILE)
-    local orig_tz
-    read orig_tz 2>/dev/null <$TZ_FILE
-    : ${TZ:=$orig_tz}
-    [ ${#TZ} -eq 0 ] && fatal "No timezone found in file %s" $(pquote $TZ_FILE)
-
-    while true ; do
-        yes_no_quit "$LIVE_COLOR$(printf "Is %s your current timezone" "$(pquote $TZ)")"
-        local ret=$?
-        case $ret in
-             0) if [ "$orig_tz" != "$TZ" ]; then
-                    echo $TZ > $TZ_FILE
-                    export TZ
-                fi
-                return 0     ;;
-             1) set_timezone ;;
-             2) return 1     ;;
-        esac
-    done
-}
-
-set_timezone() {
-    local DISTRO distro_file=/live/config/distro
-    test -r distro_file && read DISTRO 2>/dev/null $distro_file
-    : ${DISTRO:=MX}
-
-    local BOOT_MENU_DIR=/live/custom/$DISTRO/menus DO_MENUS=t
-    my_select_menu "Select Timezone" "Timezones are listed geographically" t timezone
-    local tz=${timezone#tz=}
-    [ "$tz" = "default" ] && tz=$TZ
-    TZ=$tz
-}
-
-show_all() {
-    echo_live
-    show_time utc_en          "$utc_en"
-    show_time local_en        "$loc_en"
-    show_time utc             "$utc_str"
-    show_time local           "$loc_str"
-    show_time "tz offset"     "$tz_offset"
-    echo_live
-    show_unix system          "$sys_unix"
-    show_unix utc             "$utc_unix"
-    show_unix "|sys - utc|"   "$diff_sys_utc"
-    show_unix "local"         "$loc_unix"
-    show_unix "|sys - local|" "$diff_sys_loc"
-    show_unix "|utc - local|" "$diff_utc_loc"
-}
-
-yes_no_quit() {
-    local ans title=$1
-    local fmt="  $GREEN%2s$WHITE) $CYAN%s$NO_COLOR\n"
-
-    while true; do
-        echo -e "$title?"
-        printf "$fmt" 1 "yes"
-        printf "$fmt" 2 "no"
-        printf "$fmt" 3  "quit"
-        printf "$GREEN%s \"%s\" >$NO_COLOR " "Please enter a number.  Default is" "yes"
-
-        read ans
-        case $ans in
-                 ""|1) return 0           ;;
-                    2) return 1           ;;
-                    3) ask_really_quit    ;;
-        esac
-        if [ $ans -ne 3 ]; then
-            error "$(printf "%s $ERROR_PARAM_COLOR%s" "You must enter 0, 1, or 2." "Press <enter>")"
-            read ans
-        fi
-    done
-}
-
-ask_really_quit() {
-    local ans fmt="  $GREEN%2s$WHITE) $CYAN%s$NO_COLOR\n"
-    printf "\n$GREEN%s\n"  "Really quit?"
-    printf "$fmt" 1 "yes"
-    printf "$fmt" 2 "no"
-    printf "$GREEN%s \"%s\" >$NO_COLOR " "Please enter a number.  Default is" "no"
-    read ans
-    case $ans in
-        1) exit 0 ;;
-        *) return ;;
-    esac
-}
-
 do_both() {
     echo_live "$_This_is_an_unusual_situation_"
-    yes_no_quit "Would you like to set the hardware clock manually to UTC or local time" \
+    yes_no_quit "Would you like to manually set the hardware clock to UTC or local time" \
         && manual_set_hwclock
 }
 
@@ -296,8 +236,47 @@ Manual_Data
 
     local answer
     my_select_2 "$title" "answer" "" "$manual_data" "$manual_menu"
-    #echo "answer=$answer"
-    set_hwclock $answer
+    case $answer in
+        utc|local) set_hwclock $answer ;;
+                *) exit 0              ;;
+    esac
+}
+
+yes_no_quit() {
+    local ans title=$1
+    local fmt="  $GREEN%2s$WHITE) $CYAN%s$NO_COLOR\n"
+
+    while true; do
+        echo -e "$title?"
+        printf "$fmt" 1 "yes"
+        printf "$fmt" 2 "no"
+        printf "$fmt" 3 "quit"
+        printf "$GREEN%s \"%s\" >$NO_COLOR " "Please enter a number.  Default is" "yes"
+
+        read ans
+        case $ans in
+                 ""|1) return 0           ;;
+                    2) return 1           ;;
+                    3) ask_really_quit    ;;
+        esac
+        if [ $ans -ne 3 ]; then
+            error "$(printf "%s $ERROR_PARAM_COLOR%s" "You must enter 0, 1, or 2." "Press <enter>")"
+            read ans
+        fi
+    done
+}
+
+ask_really_quit() {
+    local ans fmt="  $GREEN%2s$WHITE) $CYAN%s$NO_COLOR\n"
+    printf "\n$GREEN%s\n"  "Really quit?"
+    printf "$fmt" 1 "yes"
+    printf "$fmt" 2 "no"
+    printf "$GREEN%s \"%s\" >$NO_COLOR " "Please enter a number.  Default is" "no"
+    read ans
+    case $ans in
+        1) exit 0 ;;
+        *) return ;;
+    esac
 }
 
 my_select_menu() {
@@ -366,15 +345,41 @@ abs_diff() {
     echo ${diff#-}
 }
 
+show_all() {
+    echo_live
+    show_time utc_en          "$utc_en"
+    show_time local_en        "$loc_en"
+    show_time utc             "$utc_str"
+    show_time local           "$loc_str"
+    show_time "tz offset"     "$tz_offset"
+    echo_live
+    show_unix system          "$sys_unix"
+    show_unix utc             "$utc_unix"
+    show_unix "|sys - utc|"   "$diff_sys_utc"
+    show_unix "local"         "$loc_unix"
+    show_unix "|sys - local|" "$diff_sys_loc"
+    show_unix "|utc - local|" "$diff_utc_loc"
+}
+
 bold()   { echo "$bold_co$*$nc_co"        ;}
 pqe()    { echo "$bold_co$*$err_co"       ;}
 cq()     { echo "$cheat_co$*$m_co"        ;}
 pqe()    { echo "$bold_co$*$err_co"       ;}
 
-debug() {
-    [ ${#db_hwc} -gt 0 ] && echo "$*"
-}
+get_hwclock() { LANG=en_US.UTF-8 hwclock --show $* | sed 's/  .*//'; }
 
+show_time() { echo_live "$_X_START_PARAM_Y_" "$1" "$2"; }
+show_unix() { echo_live "$_X_Unix_START_PARAM_Y_" "$1" "$2" ; }
+
+debug() { [ ${#db_hwc} -gt 0 ] && echo "$*"; }
+
+pretend() {
+    if [ "$PRETEND_MODE" ]; then
+        echo "${bold_co}pretend:$nc_co $*"
+    else
+        "$@"
+    fi
+}
 #-------------------------------------------------------------------------------
 #-------------------------------------------------------------------------------
 main "$@" 2>&1 | tee -a $INIT_LOG_FILE
