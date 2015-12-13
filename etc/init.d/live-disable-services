@@ -13,6 +13,15 @@
 
 export PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin
 
+VBOX_SERVICES="
+virtualbox-guest-utils
+virtualbox-guest-x11
+"
+
+NFS_SERVICES="
+nfs-kernel-server
+"
+
 LEAN_SERVICES="
     acpi-fakekey
     acpi-support
@@ -101,16 +110,29 @@ prep_main() {
         esac
     done
 
+    DISABLE_NFS=true
+    local file export_files="/etc/exports"
+    for file in /etc/exports.d/*.exports ; do
+		[ -f "$file" ] && export_files="$export_files $file"
+	done
+
+    [ -f /etc/exports ] && grep -q '^[[:space:]]*[^#]*/' $export_files && DISABLE_NFS=
+
     if [ "$antiX_param" ]; then
 
         # If the ## expression matches then the resulting string length is zero
-        [ "${antiX_param##*[lL]*}" ] ||      LEAN=true
-        [ "${antiX_param##*[mM]*}" ] ||      MEAN=true
-        [ "${antiX_param##*[xX]*}" ] || XTRA_LEAN=true
-        [ "${antiX_param##*[dD]*}" ] ||   NO_DBUS=true
+        [ "${antiX_param##*[lL]*}" ] ||          LEAN=true
+        [ "${antiX_param##*[mM]*}" ] ||          MEAN=true
+        [ "${antiX_param##*[xX]*}" ] ||     XTRA_LEAN=true
+        [ "${antiX_param##*[dD]*}" ] ||       NO_DBUS=true
+        [ "${antiX_param##*[vV]*}" ] ||  DISABLE_VBOX=true
+        [ "${antiX_param##*[nN]*}" ] ||   DISABLE_NFS=true
     fi
 
-    [ "$must_run" ] || exit 0
+	test -e /live/config/virtualbox || DISABLE_VBOX=true
+
+    [ -z "$must_run" -o -n "$DISABLE_VBOX" -o -n "$DISABLE_NFS" ] || exit 0
+
     . /live/lib/live-init-utils.sh
 
     start_init_logging
@@ -134,6 +156,16 @@ main() {
         disable_services "$LEAN_SERVICES" "rc3.d rc5.d"
     fi
 
+    if [ "$DISABLE_VBOX" ]; then
+        echo_live "$_Disabling_Virtual_Box_extensions_"
+        disable_services "$VBOX_SERVICES"
+    fi
+
+    if [ "$DISABLE_NFS" ]; then
+        echo_live "$_Disabling_NFS_kernel_server_"
+        disable_services "$NFS_SERVICES"
+    fi
+
     if [ "$MEAN" ]; then
         echo_live "$_Disabling_network_auto_start_X_" "$(paren M, mean)"
         disable_services "$MEAN_SERVICES" "rcS.d"
@@ -148,7 +180,7 @@ main() {
         echo_live "$_Disabling_dbus_X_" "$(paren D, nodbus)"
         disable_services "$NO_DBUS_SERVICES" "rc3.d rc5.d"
     fi
-} 
+}
 
 
 #----------------------------------------------------------------------------
@@ -170,15 +202,14 @@ disable_services() {
 
     local rc_dir dest name slink moved length
 
-    for rc_dir in $rc_dirs; do
+    for rc_dir in /etc/$rc_dirs; do
 
-        # DISABLED_RC_DIR is defined in the library
-        dest=$DISABLED_RC_DIR/$rc_dir
+        dest=/live/config/disabled-rc.d/${rc_dir#/etc/}
         mkdir -p $dest
 
         for name in $names; do
             [ -z "${name###*}" ]  && continue
-            for slink in /etc/$rc_dir/S*$name; do
+            for slink in /$rc_dir/S*$name; do
                 [ -e "$slink" ] || continue
                 mv -f $slink $dest
 
