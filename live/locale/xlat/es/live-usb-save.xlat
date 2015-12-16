@@ -1,6 +1,7 @@
 _Could_not_find_UUID_of_boot_device_for_remounting_="No se encontró la UUID del dispositivo iniciable para montarlo de nuevo"
 _Could_not_find_boot_device_for_remounting_="No se encontró el medio de inicio para montar de nuevo"
 _Could_not_remount_boot_device_="No se pudo montar de nuevo el dispositivo iniciable"
+_Reset_file_X_="Reajustar archivo %s"
 _Restore_state_information_="Restaurar el estado de la información"
 _Save_X_desktop_Y_="Guardar %s escritorio %s"
 _Save_state_information_="Guardar la información del estado"

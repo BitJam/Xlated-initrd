@@ -1,6 +1,7 @@
 _Could_not_find_UUID_of_boot_device_for_remounting_="Kunde inte hitta boot-enhetens UUID för remounting"
 _Could_not_find_boot_device_for_remounting_="Kunde inte hitta boot-enhet för återmontering"
 _Could_not_remount_boot_device_="Kunde inte återmontera boot enheten"
+_Reset_file_X_="Återställ fil %s"
 _Restore_state_information_="Återställ lägesinformation"
 _Save_X_desktop_Y_="Spara %s skrivbord %s"
 _Save_state_information_="Spara lägesinformation"

@@ -18,3 +18,4 @@ _Your_local_time_and_UTC_time_are_currently_the_same_="Your local time and UTC t
 _Your_local_time_is_UTC_time_X_="Your local time is UTC time %s"
 _Your_local_timezone_and_the_UTC_timezone_are_currently_close_but_not_the_same_="Your local timezone and the UTC timezone are currently close but not the same"
 _by_telling_us_if_either_setting_produces_the_correct_time_="by telling us if either setting produces the correct time."
+_live_hwclock_is_currently_disabled_Sorry_="live-hwclock is currently disabled.  Sorry."
