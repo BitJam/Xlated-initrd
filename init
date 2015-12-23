@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.22.00"
-           VERSION_DATE="Wed Dec 16 13:19:19 MST 2015"
+                VERSION="7.23.00"
+           VERSION_DATE="Tue Dec 22 21:06:41 MST 2015"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -67,7 +67,7 @@
 
         DO_HOTPLUG=true
        DO_COLDPLUG=true
-    COLDPLUG_DELAY=4
+    COLDPLUG_DELAY=
 
         # Note: adding "crc32c-generic" works around a bug in the kernel:
         # https://github.com/manjaro/packages-core/issues/8
@@ -195,6 +195,8 @@ main_wrapper() {
 
     read LAST_BP_TIME < /LAST_BP_TIME
 
+    start_hotplug
+
     # Nota Bene: when error log is enabled, main_core() runs in a subshell
     # so it cannot affect our variables.
 
@@ -285,7 +287,7 @@ main_core() {
         echo $LOAD_FIRST | xargs modprobe -q -a 2>/dev/null
     fi
 
-    [ "$DO_HOTPLUG" ] && start_hotplug  $TRACE_LOAD
+    start_hotplug
 
     do_welcome "$DISTRO_PRETTY_NAME" "$VERSION" "$VERSION_DATE"
     show_bootcodes "$(live_param_filter $UNKNOWN_BOOTCODES)"
@@ -295,6 +297,10 @@ main_core() {
 
     check_unionfs
 
+    coldplug_delay
+
+    [ "$DO_COLDPLUG" ] && coldplug_modules
+
     local orig_fb_name=$(cat /sys/class/graphics/fb0/name 2> /dev/null)
     load_kernel_modules "$MODULE_LIST"
     set_fbcondecor "$SPLASH_PARAM" "$orig_fb_name"
@@ -302,7 +308,6 @@ main_core() {
     touch /live/config/cmdline
 
     if [ "$DO_MENUS" ]; then
-        coldplug_delay
         do_menus
     fi
 
@@ -459,6 +464,8 @@ main_core() {
     #late_umount $PERSIST_DEVICE
     #late_umount $SQFILE_DEV
 
+    stop_hotplug
+
     breakpoint 7 "before prepare switch_root"
 
     prepare_switch_root $NEW_ROOT $LIVE_DIR $FINAL_DIR
@@ -534,7 +541,7 @@ read_cmdline_params()
                       overlayfs) WANT_UNIONFS=overlay                            ;;
                           menus) DO_MENUS=${MENUS_LIST:-ltopd}                   ;;
                         menus=*) DO_MENUS=$DO_MENUS$value                        ;;
-                        delay=*) valid_int COLDPLUG_DELAY $param                 ;;
+            rootdelay=*|delay=*) valid_int COLDPLUG_DELAY $param                 ;;
                 hwclock=*|hwc=*) DO_HWCLOCK=true                                 ;;
                        old-conf) NO_NEW_OUTPUT=true                              ;;
                        new-conf) NO_OLD_OUTPUT=true                              ;;
@@ -807,13 +814,27 @@ valid_int() {
 }
 
 coldplug_delay() {
-    [ "$HOTPLUG_DISABLED" ] || return
-    msg  "$_Waiting_X_seconds_for_buses_to_settle_"  $COLDPLUG_DELAY
+    [ "$COLDPLUG_DELAY" ] || return
+    msg  "$_Waiting_X_seconds_for_buses_to_settle_"  $(nq $COLDPLUG_DELAY)
     sleep $COLDPLUG_DELAY
-    coldplug_modules
 }
 
 start_hotplug() {
+    [ "$DO_HOTPLUG" ] || return
+    hotplug_loop &>/dev/null 17>/dev/null &
+    HOTPLUG_PID=$!
+    vmsg 6 'Hotplug pid: %s' $(nq $HOTPLUG_PID)
+    echo $HOTPLUG_PID > /HOTPLUG_PID
+}
+
+hotplug_loop() {
+    while : ; do
+        find /sys/devices -name modalias -print0 | xargs -0 sort -u | xargs modprobe -a -q -b 2>/dev/null
+        sleep 0.2
+    done
+}
+
+old_start_hotplug() {
     local trace_load=$1  targ=/proc/sys/kernel/hotplug
 
     # Set up file for recording sequence of kernel events sent to mdev
@@ -832,6 +853,14 @@ start_hotplug() {
 }
 
 stop_hotplug() {
+    test -r /HOTPLUG_PID || return
+    read HOTPLUG_PID < /HOTPLUG_PID
+    vmsg 6 'kill hotplug pid: %s' $(nq $HOTPLUG_PID)
+    rm /HOTPLUG_PID
+    kill -9 $HOTPLUG_PID
+}
+
+old_stop_hotplug() {
     local targ=/proc/sys/kernel/hotplug
     test -e $targ && echo | tee $targ &>/dev/null
 }
