@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.23.01"
-           VERSION_DATE="Fri Dec 25 18:47:31 MST 2015"
+                VERSION="7.24.00"
+           VERSION_DATE="Fri Jan  1 13:14:49 MST 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -71,7 +71,7 @@
 
         # Note: adding "crc32c-generic" works around a bug in the kernel:
         # https://github.com/manjaro/packages-core/issues/8
-        LOAD_FIRST="usb-common usbcore ehci-hcd fusbh200-hcd fotg210-hcd battery aufs overlay crc32c-generic"
+        LOAD_FIRST="usb-common usbcore ehci-hcd fusbh200-hcd fotg210-hcd battery aufs overlay crc32c-generic mmc-block"
 
           VID_NAME=VID
       LINUXFS_NAME=linuxfs
@@ -1191,7 +1191,7 @@ from_filter() {
         case $(stat -c %t $dev) in
 
             b) cd_devs="$cd_devs $dev" ;;
-   3|8|22|179) if is_usb_or_removable $dev; then
+    3|8|22|b3) if is_usb_or_removable $dev; then
                     usb_devs="$usb_devs $dev"
                 else
                     hd_devs="$hd_devs $dev"
@@ -1288,7 +1288,7 @@ _find_files() {
         partition=${device_id##name=}
         partition=/dev/${partition##*/}
         root_device=${partition%[0-9]}
-        root_device=${root_device%[0-9]}
+        root_device=${root_device%[p0-9]}
     fi
 
     unset FOUND_DEV FOUND_MP
@@ -2366,6 +2366,7 @@ time_cmd() {
     local pid=$!
     "$@"
     local ret=$?
+    sync
     local t1=$(get_time)
     local secs=$(get_seconds $((t1 - t0)))
     kill -9 $pid
@@ -2689,9 +2690,9 @@ select_device() {
     local line pretty skip data display
     local free_rev type_rev name_rev size_rev
     #local format="$green%3s $lt_cyan%-5s $magenta%8s $yellow%8s $lt_blue%10s $lt_gray%9s $white%-16s $lt_gray%s\n"
-    local format="$green%3s $lt_cyan%s%-5s$nc_co $magenta%s%8s$nc_co $yellow%s%8s$nc_co $lt_blue%s%10s$nc_co $lt_gray%10s  $white%-16s $lt_gray%s\n"
-    local head_fmt="${hi_co}%3s %-5s %8s %8s %10s %10s  %-16s %s\n"
-    local header=$(printf "$head_fmt" "" Name Size Free FS-type Removable Label Model)
+    local format="$green%3s $lt_cyan%s%-9s$nc_co $magenta%s%5s$nc_co $yellow%s%5s$nc_co $lt_blue%s%10s$nc_co $lt_gray%6s $lt_gray%-16s $white%s\n"
+    local head_fmt="${hi_co}%3s %-9s %5s %5s %10s %6s %-16s %s\n"
+    local header=$(printf "$head_fmt" "" Name Size Free FS-type Remove Model Label)
     local title="$title\n$header"
 
     mkdir -p $mp
@@ -2706,20 +2707,23 @@ select_device() {
 
         local name=${line%%:*}
         name=${name##*/}
-        [ ${#name} -eq 0 -o ${#name} -gt 8 ] && continue
+        [ ${#name} -eq 0 -o ${#name} -gt 10 ] && continue
         #case $name in sd?[0-9]*) ;; *) continue ;; esac
 
         local type=$(echo "$line" | sed -n -r 's/.* TYPE="([^"]*)"$/\1/p' | tail -n 1)
         #uuid=$(echo "$line" | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/[^:]*: LABEL="//p')
         local label=$(echo "$line" | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/[^:]*: LABEL="//p')
 
-        local drive_name=${name%%[0-9]*}/
-        local model=$(cat  /sys/block/$drive_name/device/model 2>/dev/null)
-        local remove=$(cat /sys/block/$drive_name/removable    2>/dev/null)
-        local reado=$(cat  /sys/block/$drive_name/$name/ro     2>/dev/null)
-        local size=$(cat   /sys/block/$drive_name/$name/size   2>/dev/null)
-        size=$((size / 2 / 1024))
+        local drive_name=${name%[0-9]}
+        local drive_name=${drive_name%[p0-9]}
+        local sys_dir=/sys/block/$drive_name
+        local model=$(head -c 16  $sys_dir/device/model 2>/dev/null)
+        local remove=$(cat        $sys_dir/removable    2>/dev/null)
+        local reado=$(cat         $sys_dir/$name/ro     2>/dev/null)
+        local size=$(cat          $sys_dir/$name/size   2>/dev/null)
 
+        [ -z "$size" ] && continue
+        size=$((size / 2 / 1024))
         local dev=/dev/$name
 
         [ "$reado" = 1 ] && continue
@@ -2729,8 +2733,8 @@ select_device() {
         esac
 
         case $(stat -c %t $dev) in
-            [38]|22|179)   ;;
-            *)    continue ;;
+             [38]|22|179|b3) ;;
+             *)    continue  ;;
         esac
 
         size_rev=
@@ -2782,7 +2786,8 @@ select_device() {
         [ "$remove" = 1 ] && rtype="yes"
 
         pretty=$(printf "$format" "$cnt_lab" "$name_rev" "$name" "$size_rev" "$size_lab" \
-            "$free_rev" "$free_lab" "$type_rev" "$type" "$rtype" "$label" "$model")
+            "$free_rev" "$free_lab" "$type_rev" "$type" "$rtype" "$model" "$label")
+
 
         local display="${display}$pretty\n"
 
@@ -2859,7 +2864,7 @@ label_device() {
         yes_NO  "$_Give_X_the_label_Y_" $(pq $dev) "$(pq "$new")" || return
     fi
 
-    log_cmd ld_path $pre "$new" $post || return
+    log_cmd ld_path $pre "$new" $post 2>&1 || return
 
     msg  "$_Label_updated_to_X_" $(pq $new)
 }
@@ -2868,24 +2873,24 @@ label_to_dev() {
     local label=$1 devices
     local dev line lab
     while read dev line; do
-        lab=$( echo "$line" |sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/^LABEL="//p')
-        [ "$lab" = "$label" ] && devices="$devices$dev "
+        lab=$(echo "$line" | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/^LABEL="//p')
+        [ "$lab" = "$label" ] && devices="$devices${devices:+ }${dev%:}"
     done <<EOT
 $(blkid)
 EOT
-    echo "$devices" | sed -e 's/://g' -e 's/ $//'
+    echo $devices
 }
 
 uuid_to_dev() {
     local uuid=$1 devices
     local dev line id
     while read dev line; do
-        id=$( echo "$line" | sed -n -r 's/.* UUID="([^"]*)"( |$).*/\1/p')
-        [ -n "$id" -a -z "${id##$uuid}" ] && devices="$devices$dev "
+        id=$(echo "$line" | sed -n -r 's/(^|.* )UUID="([^"]*)"( |$).*/\2/p')
+        [ ${#id} -gt 0 -a -z "${id##$uuid}" ] && devices="$devices${devices:+ }${dev%:}"
     done <<EOT
 $(blkid)
 EOT
-    echo "$devices" | sed -e 's/://g' -e 's/ $//'
+    echo $devices
 }
 
 cleanse_dev() {
@@ -3539,7 +3544,7 @@ mount_persist_device() {
     if [ -z "$from_persist" -a -z "$PERSIST_ID" ]; then
 
         case $(stat -c %t $SQFILE_DEV) in
-         [38]|22|179) ;;
+         [38]|22|b3) ;;
             *) warn  "Can't use %s as a persistence device" $(pqw $SQFILE_DEV)
                return 20 ;;
         esac
