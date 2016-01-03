@@ -1282,13 +1282,19 @@ _find_files() {
         short_files=$files
     fi
 
-    local last_list root_device partition partition_error
+    local last_list disk_device partition partition_error
 
+    # Find disk device if we are looking for a named partition.
+    # This lets us bail early if the disk is found but the partition is not.
     if [ -n "$device_id" -a -z "${device_id##name=*}" ]; then
         partition=${device_id##name=}
-        partition=/dev/${partition##*/}
-        root_device=${partition%[0-9]}
-        root_device=${root_device%[p0-9]}
+        partition=${partition##*/}
+        case $partition in
+            mmcblk*) disk_device=${partition%p[0-9]}                                    ;;
+                  *) disk_device=${partition%[0-9]}  ; disk_device=${disk_device%[0-9]} ;;
+        esac
+        disk_device=/dev/$disk_device
+        partition=/dev/$partition
     fi
 
     unset FOUND_DEV FOUND_MP
@@ -1402,12 +1408,12 @@ _find_files() {
             # Give up early if the root device is found but the partition is not
             # But wait a second in case there is a delay for the partitions to show
             if [ "$partition_error" ]; then
-                warn  "Found root device %s but not partition %s" "$(pqw $root_device)" "$(pqw $partition)"
+                warn  "Found root device %s but not partition %s" "$(pqw $disk_device)" "$(pqw $partition)"
                 sleep 1
                 final_try=true
             fi
 
-            [ "$root_device" -a -e "$root_device" -a ! -e $partition ] && partition_error=true
+            [ "$disk_device" -a -e "$disk_device" -a ! -e $partition ] && partition_error=true
 
             find_device "$find_type" "$try" "$final_try" "$device_id" || return $?
             if [ -z "$DEVICE_LIST" ]; then
@@ -1810,15 +1816,21 @@ linuxfs_error() {
 }
 
 check_kernel_version() {
-    local mp=$1
+    local mp=${1%/}  fatal=$2
     local kversion=$(uname -r)
     local mod_dir=/lib/modules/$kversion
 
     [ -d $mp$mod_dir ] && return
 
-    _non_fatal  "$_Kernel_version_mismatch_" \
-        "$(printf  "$_Kernel_version_X_" $(pqh $kversion))" \
-        "$(printf  "$_The_module_directory_X_is_missing_" $(pqh $mp$mod_dir))"
+    if [ "$fatal" ]; then
+        _fatal  "$_Kernel_version_mismatch_" \
+            "$(printf  "$_Kernel_version_X_" $(pqh $kversion))" \
+            "$(printf  "$_The_module_directory_X_is_missing_" $(pqh $mp$mod_dir))"
+    else
+        _non_fatal  "$_Kernel_version_mismatch_" \
+            "$(printf  "$_Kernel_version_X_" $(pqh $kversion))" \
+            "$(printf  "$_The_module_directory_X_is_missing_" $(pqh $mp$mod_dir))"
+    fi
 }
 
 #==============================================================================
@@ -1875,7 +1887,8 @@ check_unionfs() {
     [ "$OVERLAY_OKAY" ] && vmsg 6  "$_Found_X_" overlay
 
     case $AUFS_OKAY:$OVERLAY_OKAY in
-            :) fatal  "$_Neither_X_nor_Y_is_available_" aufs overlayfs ;;
+            :)  check_kernel_version / fatal
+                fatal  "$_Neither_X_nor_Y_is_available_" aufs overlayfs ;;
     esac
 
     case $WANT_UNIONFS in
@@ -2703,40 +2716,36 @@ select_device() {
     (bogo_meter)&
     local pid=$!
 
-    while read -r line ; do
+    local name
+    while read -r name line ; do
 
-        local name=${line%%:*}
-        name=${name##*/}
         [ ${#name} -eq 0 -o ${#name} -gt 10 ] && continue
         #case $name in sd?[0-9]*) ;; *) continue ;; esac
 
         local type=$(echo "$line" | sed -n -r 's/.* TYPE="([^"]*)"$/\1/p' | tail -n 1)
         #uuid=$(echo "$line" | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/[^:]*: LABEL="//p')
-        local label=$(echo "$line" | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/[^:]*: LABEL="//p')
-
-        local drive_name=${name%[0-9]}
-        local drive_name=${drive_name%[p0-9]}
-        local sys_dir=/sys/block/$drive_name
-        local model=$(head -c 16  $sys_dir/device/model 2>/dev/null)
-        local remove=$(cat        $sys_dir/removable    2>/dev/null)
-        local reado=$(cat         $sys_dir/$name/ro     2>/dev/null)
-        local size=$(cat          $sys_dir/$name/size   2>/dev/null)
-
-        [ -z "$size" ] && continue
-        size=$((size / 2 / 1024))
-        local dev=/dev/$name
-
-        [ "$reado" = 1 ] && continue
-
         case $type in
             ""|udf|iso9660|swap|squashfs) continue
         esac
 
+        local disk_name  dev=/dev/$name
         case $(stat -c %t $dev) in
-             [38]|22|179|b3) ;;
-             *)    continue  ;;
+            [38]|22)  disk_name=${name%[0-9]};  disk_name=${disk_name%[0-9]} ;;
+             179|b3)  disk_name=${name%p[0-9]}                               ;;
+                  *)  continue                                               ;;
         esac
 
+        local sys_dir=/sys/block/$disk_name
+        local model=$(head -c 16  $sys_dir/device/model 2>/dev/null)
+        local remove=$(cat        $sys_dir/removable    2>/dev/null)
+        local reado=$(cat         $sys_dir/$name/ro     2>/dev/null)
+        local size=$(cat          $sys_dir/$name/size   2>/dev/null)
+        [ "$reado" = 1 ] && continue
+        [ -z "$size" ] && continue
+        size=$((size / 2 / 1024))
+
+
+        local label=$(echo "$line" | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/[^:]*: LABEL="//p')
         size_rev=
         name_rev=
         free_rev=
@@ -2797,7 +2806,7 @@ select_device() {
         cnt=$((cnt + 1))
 
     done <<Blkid
-$(blkid | sed -r -e 's=^(/dev/sd.[0-9][0-9]):=\1+\1:=' -e 's=^(/dev/sd.)([0-9]):=\10\2+\1\2:=' | sort)
+$(sorted_blkid)
 Blkid
     kill -9 $pid
     echo
@@ -2823,6 +2832,19 @@ Blkid
     my_select_2 "$title" $var "0" "$data" "$display"
     echo -e "$display" >> $MY_LOG
     return 0
+}
+
+#------------------------------------------------------------------------------
+# sort blkid output by device name, including a numerical sort when the sd
+# partition numbers have two-digits.  Strip off leading "/dev/" and the ":".
+#------------------------------------------------------------------------------
+sorted_blkid() {
+    blkid | sed -r \
+            -e 's=^/dev/==' \
+            -e 's=^(sd.[0-9][0-9]):=\1+\1:=' \
+            -e 's=^(sd.)([0-9]):=\10\2+\1\2:=' \
+        | sort \
+        | sed -e 's/^sd.[0-9][0-9]+//' -e 's/://'
 }
 
 label_device() {
@@ -2920,16 +2942,16 @@ label_error() {
     err  "No device with %s was found" "$name $(cqe $value)"
 
     vmsg_nc 3  "$_Valid_X_" "${name}s:"
-    local val
-    while read val; do
-        [ "$val" ] && echo "$white  $param=$val$nc_co"
+    local dev val
+    while read dev val; do
+        [ "$val" ] && printf "  %-10s $white $param=$val$nc_co\n" $dev
     done <<Label_Error
 $(
 case $name in
     label)
-        blkid | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/[^:]*: LABEL="//p' ;;
+        sorted_blkid | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/ LABEL="/ /p' ;;
      uuid)
-        blkid | sed -n -r 's/.* UUID="([^"]*)"( |$).*/\1/p' ;;
+        sorted_blkid | sed -n -r 's/^([^ ]*).* UUID="([^"]*)"( |$).*/\1 \2/p' ;;
 esac
 )
 Label_Error
