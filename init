@@ -57,7 +57,7 @@
            MOD_DIR="/lib/modules/$(uname -r)"
 
          FROM_TYPE="usb,cd"
-     FROM_TYPE_ALL="usb,cd,hd"
+     FROM_TYPE_ALL="usb,cd,mmc,hd"
 
       FRUGAL_FILES="linuxfs linuxfs.md5 vmlinuz vmlinuz.md5 initrd.gz initrd.gz.md5 xtra xtra.tgz ../boot"
 
@@ -68,6 +68,7 @@
         DO_HOTPLUG=true
        DO_COLDPLUG=true
     COLDPLUG_DELAY=
+          USER_UID=1000
 
         # Note: adding "crc32c-generic" works around a bug in the kernel:
         # https://github.com/manjaro/packages-core/issues/8
@@ -183,9 +184,9 @@ main_wrapper() {
     else
         # Evaluate redirects RIGHT TO LEFT:
         #
-        #  stdout  1 -------+        +---> while, sed, tee ---> screen (stdout)
+        #  stdout  1 -------.        .---> while, sed, tee ---> screen (stdout)
         #                    \      /
-        #  stderr  2 ---+     `----/--------------------------> screen (stderr)
+        #  stderr  2 ---.     `--- / -------------------------> screen (stderr)
         #                \        /
         #         17      `------'
 
@@ -223,10 +224,7 @@ main_wrapper() {
     late_umount $PERSIST_DEVICE
     late_umount $SQFILE_DEV
 
-    #free -m >> $MY_LOG
-    echo 3 > /proc/sys/vm/drop_caches
-    vmsg 6 'drop caches'
-    #free -m >> $MY_LOG
+    confile remasterable && run_init_scripts $NEW_ROOT live-usb-storage
 
     breakpoint 9 "right before starting init"
 
@@ -243,6 +241,11 @@ main_wrapper() {
 
     # re-enable console screen blanking at 15 minutes
     [ "$VT_BLANK" ] && printf "\e[9;$VT_BLANK]\e[14;$VT_BLANK]"
+
+    #free -m >> $MY_LOG
+    echo 3 > /proc/sys/vm/drop_caches
+    vmsg 6 'drop caches'
+    #free -m >> $MY_LOG
 
     if find_init_prog INIT_PROG $NEW_ROOT; then
 
@@ -541,7 +544,7 @@ read_cmdline_params()
                       overlayfs) WANT_UNIONFS=overlay                            ;;
                           menus) DO_MENUS=${MENUS_LIST:-ltopd}                   ;;
                         menus=*) DO_MENUS=$DO_MENUS$value                        ;;
-            rootdelay=*|delay=*) valid_int COLDPLUG_DELAY $param                 ;;
+            rootdelay=*|delay=*) small_int COLDPLUG_DELAY $param                 ;;
                 hwclock=*|hwc=*) DO_HWCLOCK=true                                 ;;
                        old-conf) NO_NEW_OUTPUT=true                              ;;
                        new-conf) NO_OLD_OUTPUT=true                              ;;
@@ -554,7 +557,7 @@ read_cmdline_params()
              bootuuid=*|buuid=*) BOOT_ID=uuid=$value                             ;;
                bootdev=*|bdev=*) BOOT_ID=name=$value                             ;;
 
-                  try=*|retry=*) valid_int RETRY_TIME $param                     ;;
+                  try=*|retry=*) small_int RETRY_TIME $param                     ;;
 
             persistdir=*|pdir=*) PERSIST_PATH=${value#/}                         ;;
 
@@ -562,7 +565,7 @@ read_cmdline_params()
           persistuuid=*|puuid=*) PERSIST_ID=uuid=$value   ;  SET_PERSIST=true    ;;
             persistdev=*|pdev=*) PERSIST_ID=name=$value   ;  SET_PERSIST=true    ;;
 
- persistretry=*|pretry=*|ptry=*) valid_int PERSIST_RETRY $param                  ;;
+ persistretry=*|pretry=*|ptry=*) small_int PERSIST_RETRY $param                  ;;
 
                           dbv=*) DBV=$value                                      ;;
                         fneed=*) FRUGAL_NEEDED=$value                            ;;
@@ -585,7 +588,7 @@ read_cmdline_params()
                        sqname=*) SQFILE_NAME=${value#/}                          ;;
                            sq=*) SQFILE_FILE=$value                              ;;
 
-           verbose=*|verb=*|v=*) valid_int VERBOSE $param                        ;;
+           verbose=*|verb=*|v=*) small_int VERBOSE $param                        ;;
                            bp=*) BREAK_POINTS=$BREAK_POINTS,$value               ;;
                            pk=*) PRINTK=$value                                   ;;
 
@@ -634,7 +637,7 @@ read_cmdline_params()
                       errtest=*) TEST_FATAL=$value                               ;;
                         noerr=*) NO_ERROR=$value                                 ;;
 
-                      vtblank=*) valid_int VT_BLANK $param                       ;;
+                      vtblank=*) small_int VT_BLANK $param                       ;;
 
                livedir=*|ldir=*) FINAL_DIR=$value                                ;;
         pw|passwd|pw=*|passwd=*) FORCE_PASSWD=true                               ;;
@@ -642,6 +645,9 @@ read_cmdline_params()
                       bootchart) INIT_COMMAND=/sbin/bootchartd                   ;;
                         noplink) NO_PLINK=,noplink                               ;;
                           plink) NO_PLINK=                                       ;;
+
+                       fatuid=*) any_int USER_UID $param                         ;;
+
         #----- Some known codes -------------------------
 
         [sS1-6]|BOOT_IMAGE=*);;
@@ -802,7 +808,7 @@ read_cmdline_params()
     done
 }
 
-valid_int() {
+small_int() {
     local var=$1 val=${2#*=} name=${2%%=*} param=$2
 
     case $val in
@@ -810,6 +816,16 @@ valid_int() {
         [0-9]|[0-9][0-9]) eval $var=\$val;  return ;;
 
     esac
+    INTEGER_ERRORS="$INTEGER_ERRORS $param"
+}
+
+any_int() {
+    local var=$1 val=${2#*=} name=${2%%=*} param=$2
+
+    if echo $val | egrep -q "^[0-9]+$"; then
+        eval $var=\$val
+        return
+    fi
     INTEGER_ERRORS="$INTEGER_ERRORS $param"
 }
 
@@ -1185,13 +1201,14 @@ from_filter() {
     esac
 
     # First segregate devices by type
-    local dev cd_devs hd_devs usb_devs
+    local dev cd_devs hd_devs usb_devs mmc_devs
     for dev; do
         [ -b "$dev" ] || continue
         case $(stat -c %t $dev) in
 
             b) cd_devs="$cd_devs $dev" ;;
-    3|8|22|b3) if is_usb_or_removable $dev; then
+           b3) mmc_devs="$mmc_devs $dev" ;;
+       3|8|22) if is_usb_or_removable $dev; then
                     usb_devs="$usb_devs $dev"
                 else
                     hd_devs="$hd_devs $dev"
@@ -1206,11 +1223,14 @@ from_filter() {
             cd) FILTERED_LIST="$FILTERED_LIST$cd_devs"
                 cd_devs= ;;
 
-            usb) FILTERED_LIST="$FILTERED_LIST$usb_devs"
+           usb) FILTERED_LIST="$FILTERED_LIST$usb_devs"
                 usb_devs= ;;
 
             hd) FILTERED_LIST="$FILTERED_LIST$hd_devs"
                 hd_devs= ;;
+
+           mmc) FILTERED_LIST="$FILTERED_LIST$mmc_devs"
+                mmc_devs= ;;
 
            "") ;;
 
@@ -1221,7 +1241,7 @@ from_filter() {
     #. Invalid <parameter-name> value(s) <bad values>
     [ "$invalid_scan" ] \
         && _fatal "$(printf  "Invalid %s values(s) %s" "$(pqh from=)" "$(pqh $invalid_scan)")" \
-        "$(printf  "$_Valid_values_are_X_" "$(cq cd hd usb all)")"
+        "$(printf  "$_Valid_values_are_X_" "$(cq cd hd mmc usb all)")"
 
     [ "$FILTERED_LIST" ]
 
@@ -2012,16 +2032,17 @@ try_mount() {
     local type=$(blkid $dev | sed -n -r 's/.* TYPE="([^"]*)"$/\1/p' | tail -n 1)
     [ "$type" ] || return 1
     local opts=$rw,noatime
-    local winops=$opts,umask=000,dmask=002,fmask=113
+    local winopts=$opts,umask=000,dmask=002,fmask=113
+    local fatopts=$winopts,shortname=winnt,uid=$USER_UID
 
     case $type in
-        ext[234]) log_cmd mount -t $type -o $opts                    $dev "$mp" 2>/dev/null ;;
-            vfat) log_cmd mount -t vfat -o shortname=winnt,$winopts  $dev "$mp" 2>/dev/null ;;
-         iso9660) log_cmd mount -t iso9660 -o ro                     $dev "$mp" 2>/dev/null ;;
-             udf) log_cmd mount -t udf -o ro                         $dev "$mp" 2>/dev/null ;;
-            ntfs) log_cmd ntfs-3g -o force,$winopts                  $dev "$mp" 2>/dev/null 17>/dev/null || \
-                  log_cmd mount -t ntfs -o umask=000,ro              $dev "$mp" 2>/dev/null ;;
-               *) log_cmd mount -t $type -o $opts                    $dev "$mp" 2>/dev/null ;;
+        ext[234]) log_cmd mount -t $type   -o $opts           $dev "$mp" 2>/dev/null ;;
+            vfat) log_cmd mount -t vfat    -o $fatopts        $dev "$mp" 2>/dev/null ;;
+         iso9660) log_cmd mount -t iso9660 -o ro              $dev "$mp" 2>/dev/null ;;
+             udf) log_cmd mount -t udf     -o ro              $dev "$mp" 2>/dev/null ;;
+            ntfs) log_cmd ntfs-3g          -o force,$winopts  $dev "$mp" 2>/dev/null 17>/dev/null || \
+                  log_cmd mount -t ntfs    -o umask=000,ro    $dev "$mp" 2>/dev/null ;;
+               *) log_cmd mount -t $type   -o $opts           $dev "$mp" 2>/dev/null ;;
     esac
     return $?
 }
@@ -4113,7 +4134,7 @@ AutoLogin
 }
 
 fancy_prompt() {
-    local prompt=$1  dir=$2
+    local prompt=${1:-prompt-fancy}  dir=$2
     local bashrc=$dir/etc/skel/.bashrc  fp_prog=/usr/local/bin/fancy-prompts.bash
 
     local cmd=${prompt%%\ *}
@@ -4123,8 +4144,10 @@ fancy_prompt() {
         db_msg 'fancy prompts were already enabled'
     else
         db_msg 'Enable fancy prompts'
-        echo "[ -r $fp_prog ] && source $fp_prog" >> $bashrc
+        # FIXME: use here-string and write only once
+        echo "[ -r $fp_prog ] && source $fp_prog"   >> $bashrc
         echo "[ -n \"\$(alias $cmd)\" ] && $prompt" >> $bashrc
+        echo 'PATH=$PATH:/live/bin'                 >> $bashrc
     fi
 
     local file full_file
@@ -4301,6 +4324,7 @@ SQFS_MP="$SQFS_MP"
 SQFS_VID_FILE="$SQFS_VID_FILE"
 STATIC_ROOT="$STATIC_ROOT"
 TORAM_MP="$TORAM_MP"
+USER_UID="$USER_UID"
 VID_ERROR="$VID_ERROR"
 VID_FILE="$VID_FILE"
 Initrd_Out
