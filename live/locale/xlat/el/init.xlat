@@ -91,7 +91,6 @@ _The_number_X_is_out_of_range_="Ο αριθμός <%s> είναι εκτός ε�
 _There_is_X_Meg_available_on_the_device_="Υπάρχει %s Meg διαθέσιμες στη συσκευή"
 _There_were_no_errors_on_X_="Δεν υπήρχαν σφάλματα στο %s"
 _This_default_size_will_leave_X_Meg_free_="Αυτό το προεπιλεγμένο μέγεθος θα αφήσει %s Meg ελευθερο"
-_Timezones_are_listed_geographically_="Οι ζώνες ώρας αναφέρονται γεωγραφικά"
 _Unknown_command_="Άγνωστη εντολή"
 _Unmount_successful_="Unmount επιτυχής"
 _Update_label_on_X_from_Y_to_Z_="Ενημέρωση ετικέτα στο %s από %s σε %s"
