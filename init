@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.24.02"
-           VERSION_DATE="Sun Jan  3 00:40:04 MST 2016"
+                VERSION="7.24.04"
+           VERSION_DATE="Tue Mar 15 09:11:11 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -70,6 +70,8 @@
     COLDPLUG_DELAY=
           USER_UID=1000
           USER_GID=1000
+
+   PLUG_LOOP_DELAY=50   # In 100ths of a second
 
         # Note: adding "crc32c-generic" works around a bug in the kernel:
         # https://github.com/manjaro/packages-core/issues/8
@@ -156,8 +158,8 @@ main_wrapper() {
 
     read_distro_release /etc/initrd-release
     : ${DISTRO_BUG_REPORT_URL:=$BUG_REPORT_URL}
-    : ${DISTRO_NAME:=MX}
-    : ${DISTRO_PRETTY_NAME:=MX-15 (Fusion)}
+    : ${DISTRO_NAME:=antiX}
+    : ${DISTRO_PRETTY_NAME:=antiX-16 (generic)}
 
     custom_code 0 'before reading boot codes'
 
@@ -226,6 +228,8 @@ main_wrapper() {
     late_umount $SQFILE_DEV
 
     confile remasterable && run_init_scripts $NEW_ROOT live-usb-storage
+
+    chmod 700 $NEW_ROOT/live
 
     breakpoint 9 "right before starting init"
 
@@ -543,7 +547,7 @@ read_cmdline_params()
         case $param in
                            aufs) WANT_UNIONFS=aufs                               ;;
                       overlayfs) WANT_UNIONFS=overlay                            ;;
-                          menus) DO_MENUS=${MENUS_LIST:-ltopd}                   ;;
+                          menus) DO_MENUS=${MENUS_LIST:-ltopds}                  ;;
                         menus=*) DO_MENUS=$DO_MENUS$value                        ;;
             rootdelay=*|delay=*) small_int COLDPLUG_DELAY $param                 ;;
                 hwclock=*|hwc=*) DO_HWCLOCK=true                                 ;;
@@ -839,16 +843,18 @@ coldplug_delay() {
 
 start_hotplug() {
     [ "$DO_HOTPLUG" ] || return
-    hotplug_loop &>/dev/null 17>/dev/null &
-    HOTPLUG_PID=$!
-    vmsg 6 'Hotplug pid: %s' $(nq $HOTPLUG_PID)
-    echo $HOTPLUG_PID > /HOTPLUG_PID
+    coldplug-loop $PLUG_LOOP_DELAY &>/dev/null 17>/dev/null &
+    COLDPLUG_LOOP_PID=$!
+    vmsg 6 'Hotplug pid: %s' $(nq $COLDPLUG_LOOP_PID)
+    echo $COLDPLUG_LOOP_PID > /COLDPLUG_LOOP_PID
 }
 
 hotplug_loop() {
+    local delay=${1:=500}
+    local micro_s=$((delay * 10000))
     while : ; do
         find /sys/devices -name modalias -print0 | xargs -0 sort -u | xargs modprobe -a -q -b 2>/dev/null
-        sleep 0.2
+        usleep $micro_s
     done
 }
 
@@ -871,11 +877,11 @@ old_start_hotplug() {
 }
 
 stop_hotplug() {
-    test -r /HOTPLUG_PID || return
-    read HOTPLUG_PID < /HOTPLUG_PID
-    vmsg 6 'kill hotplug pid: %s' $(nq $HOTPLUG_PID)
-    rm /HOTPLUG_PID
-    kill -9 $HOTPLUG_PID
+    test -r /COLDPLUG_LOOP_PID || return
+    read COLDPLUG_LOOP_PID < /COLDPLUG_LOOP_PID
+    vmsg 6 'kill hotplug pid: %s' $(nq $COLDPLUG_LOOP_PID)
+    rm /COLDPLUG_LOOP_PID
+    kill -9 $COLDPLUG_LOOP_PID
 }
 
 old_stop_hotplug() {
@@ -2679,11 +2685,11 @@ do_menus() {
     my_select_menu 'Select Language' 'Languages are listed alphabetically'           l lang
     [ "$lang" ] && read_xlat init ${lang##*=}
     msg "lang: ${lang##*=}"
-    my_select_menu  "$_Select_Timezone_"            "$_Timezones_are_listed_geographically_" t timezone
+    my_select_menu  "$_Select_Timezone_"            "$_Timezones_are_sorted_by_longitude_"   t timezone
     my_select_menu  "$_Select_Option_"              "$_Only_one_option_can_be_selected_"     o options
     my_select_menu  "$_Select_Persistence_Option_" ""                                    p persist
     vmsg 6 "cmdline:$white $cmdline"
-    echo "$cmdline" > /live/config/cmdline
+    [ ${#cmdline} -gt 0 ] && echo "$cmdline" > /live/config/cmdline
     read_cmdline_params "$cmdline"
 }
 
@@ -2694,7 +2700,12 @@ do_late_menus() {
     local cmdline
     my_select_menu  "$_Select_Desktop_" "" d desktop
     vmsg 6 "cmdline:$white $cmdline"
-    echo "$cmdline" >> /live/config/cmdline
+    [ ${#cmdline} -gt 0 ] && echo "$cmdline" > /live/config/cmdline
+
+    BOOT_MENU_DIR=/live/custom/$DISTRO_NAME/menus
+    my_select_menu  "$_Save_these_changes_" "" s save
+    vmsg 6 "cmdline:$white $cmdline"
+    [ ${#cmdline} -gt 0 ] && echo "$cmdline" > /live/config/cmdline
 }
 
 size_label_m() { _size_label $1   "M G T" ;}
@@ -4145,11 +4156,16 @@ fancy_prompt() {
     if grep -q $cmd $bashrc; then
         db_msg 'fancy prompts were already enabled'
     else
-        db_msg 'Enable fancy prompts'
-        # FIXME: use here-string and write only once
-        echo "[ -r $fp_prog ] && source $fp_prog"   >> $bashrc
-        echo "[ -n \"\$(alias $cmd)\" ] && $prompt" >> $bashrc
-        echo 'PATH=$PATH:/live/bin'                 >> $bashrc
+        db_msg 'Enable fancy prompts and other goodies'
+
+        cat << Fancy_Stuff >> $bashrc
+
+#----- Added by live initrd init script
+[ -r $fp_prog ] && source $fp_prog
+[ -n "\$(alias $cmd)" ] && $prompt
+echo \$PATH | grep -q /live/bin || PATH=\$PATH:/live/bin
+Fancy_Stuff
+
     fi
 
     local file full_file
@@ -4493,6 +4509,15 @@ run_init_scripts() {
     #-jbb chroot $new_root $persist_save --cli --nolog --quiet
 }
 
+# Copy src to dest if they are different
+update_file() {
+    local src=$1  dest=$2  if_exists=$3
+    [ ${#if_exists} -gt 0 -a ! -e $dest ] && return
+    test -e $src || return
+    diff -q $src $dest &>/dev/null && return
+    cp -a $src $dest
+}
+
 late_umount() {
     local dev=$1
     [ "$dev" ] || return
@@ -4545,9 +4570,10 @@ prepare_switch_root() {
     # Avoid PID wrap by setting a large max
     echo 4000000 > /proc/sys/kernel/pid_max 2>/dev/null
 
-    mount_tmpfs $new_root/media 10 /media
-    mount_tmpfs $new_root/run   10 /run      mode=755,nodev
-    mount_tmpfs $new_live       10 $live_dir mode=755
+    mount_tmpfs $new_root/media  10 /media
+    mount_tmpfs $new_root/run    10 /run        mode=755,nodev
+    mount_tmpfs $new_live        10 $live_dir   mode=755
+
     ln -s . $new_live/live
 
     test -e /live/README && cp /live/README $new_live/
@@ -4586,6 +4612,10 @@ prepare_switch_root() {
         mkdir -p $new
         cp -a $old/* $new
     done
+
+    local new_config=$new_root/etc/live/config
+    mkdir -p $new_config
+    mount --bind $new_live/config $new_config
 
     system_mount $new_root
 
