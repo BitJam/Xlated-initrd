@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.24.04"
-           VERSION_DATE="Tue Mar 15 09:11:11 MDT 2016"
+                VERSION="7.24.05"
+           VERSION_DATE="Thu Mar 24 22:59:00 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -230,13 +230,13 @@ main_wrapper() {
     #if confile remasterable; then
         if detect_old_persist_scripts $NEW_ROOT; then
             DISABLE_STORE=true
-            warn  "$_X_disabled_due_to_outdated_persistence_scripts_and_libraries_" "$(pqw LiveUSB-Storage)"
+            warn  "$_X_disabled_due_to_outdated_persistence_scripts_and_libs_" "$(pqw LiveUSB-Storage)"
         else
             confile remasterable && run_init_scripts $NEW_ROOT live-usb-storage
 
             local new_config=$NEW_ROOT/etc/live/config
             mkdir -p $new_config
-            mount --bind $NEW_LIVE/config $new_config
+            mount --bind /live/aufs/live/config $new_config
 
             chmod 700 $NEW_ROOT/live
         fi
