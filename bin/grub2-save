@@ -7,6 +7,7 @@ PATH=$PATH:bin:/live/bin
 CUSTOM_COMMENT="#--custom"
 DEFAULT_RESOLUTION="1024x768"
 DEFAULT_KERNEL="/antiX/vmlinuz"
+MENUS="menus"
 
 usage() {
     local ret=${1:-0}
@@ -134,7 +135,7 @@ update_grub2() {
         elif [ -z "${line##linux *}" ]; then
 
             if echo "$line" | grep -q "\<menus\>"; then
-                line=$(echo "$line" | sed -r "s|^(linux\s*[^ ]+).*|\1 $params menus|")
+                line=$(echo "$line" | sed -r "s|^(linux\s*[^ ]+).*|\1 $params $MENUS|")
             fi
 
         fi
@@ -150,16 +151,16 @@ Read_File
     # local tmp_file=$(backup_name $file .tmp)
     echo -e "$out" | sed -r "s/(default=)%DEFAULT%/\1$default_entry/" > $file
 
-    printf "Updated file %s\n" $file
-    printf "With: %s" "$params"
+    printf "    Updated file %s\n" $file
+    printf "    With: %s\n" "$params"
     sleep 1
 }
 
 gather_params() {
     local p out
-    for p in $(cat /proc/cmdline /live/config/cmdline 2>/dev/null) $*; do
+    for p in $(cat /live/config/proc-cmdline /live/config/cmdline 2>/dev/null) $*; do
         case $p in
-                  menus|menus=*) continue ;;
+                  menus|menus=*) MENUS=$p ; continue ;;
               gfxsave|gfxsave=*) continue ;;
             bootsave|bootsave=*) continue ;;
                    BOOT_IMAGE=*) continue ;;
