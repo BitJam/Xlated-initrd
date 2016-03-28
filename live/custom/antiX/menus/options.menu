@@ -1,3 +1,4 @@
+<<<<<<< HEAD
   1) none
 <<<<<<< HEAD
   2) checkmd5       Check integrity of the install media
@@ -22,6 +23,9 @@
  12) nousb2         Disable all usb-2 devices while booting
 >>>>>>> upstream/master
 =======
+=======
+  1) Default
+>>>>>>> upstream/master
   2) checkmd5        Check integrity of the install media
   3) checkfs         Check LiveUSB ext2/3/4 and persistent file systems
   4) toram           Copy the compressed file system to RAM
