@@ -577,7 +577,7 @@ read_late_cmdline_params() {
                     frugal-root) FRUGAL_ID=$frugal_id ; FRUGAL=true ; PERSIST="root!"             ;;
                   frugal-static) FRUGAL_ID=$frugal_id ; FRUGAL=true ; PERSIST="root!,home,static" ;;
                     frugal-home) FRUGAL_ID=$frugal_id ; FRUGAL=true ; PERSIST="home!"             ;;
-                    only-frugal) FRUGAL_ID=$frugal_id ; FRUGAL=true                               ;;
+                    frugal-only) FRUGAL_ID=$frugal_id ; FRUGAL=true                               ;;
         esac
     done
 }
@@ -2676,7 +2676,7 @@ my_select() {
 
         [ "$lab" =  "$_quit_" ] && lab=$bold_co$lab$nc_co
         [ $cnt = "$default" ] && lab=$(printf "%${width}s (%s)" "$lab" "$(cq  "$_default_")")
-        display="${display}$(printf "%green%2d$white)$cyan %${width}s" $dcnt "$lab")\n"
+        display="${display}$(printf "$green%2d$white)$cyan %${width}s" $dcnt "$lab")\n"
     done
 
     my_select_2 "$title" $var "$default" "$data" "$display"
