@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.50.01"
-           VERSION_DATE="Mon Mar 28 10:42:50 MDT 2016"
+                VERSION="7.51.01"
+           VERSION_DATE="Wed Mar 30 12:12:13 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -163,6 +163,7 @@ main_wrapper() {
 
     custom_code 0 'before reading boot codes'
 
+    clear_env
     read_cmdline_params
     select_breakpoints
 
@@ -568,10 +569,10 @@ read_late_cmdline_params() {
                           toram) TO_RAM=true                                     ;;
 
         # Convenience short cuts from our menus
-                    all-persist) PERSIST="root!,home"                            ;;
-                   root-persist) PERSIST="root!"                                 ;;
-                    static-root) PERSIST="root!,home,static"                     ;;
-                   home-persist) PERSIST="home!"                                 ;;
+                    persist-all) PERSIST="root!,home"                            ;;
+                   persist-root) PERSIST="root!"                                 ;;
+                persist-statict) PERSIST="root!,home,static"                     ;;
+                   persist-home) PERSIST="home!"                                 ;;
 
                  frugal-persist) FRUGAL_ID=$frugal_id ; FRUGAL=true ; PERSIST="root!,home"        ;;
                     frugal-root) FRUGAL_ID=$frugal_id ; FRUGAL=true ; PERSIST="root!"             ;;
@@ -710,15 +711,15 @@ read_cmdline_params()
                           toram)  ;;
 
         # Convenience short cuts from our menus
-                    all-persist)  ;;
-                   root-persist)  ;;
-                    static-root)  ;;
-                   home-persist)  ;;
+                    persist-all)  ;;
+                   persist-root)  ;;
+                 persist-static)  ;;
+                   persist-home)  ;;
                  frugal-persist)  ;;
                     frugal-root)  ;;
                   frugal-static)  ;;
                     frugal-home)  ;;
-                    only-frugal)  ;;
+                    frugal-only)  ;;
 
         #----- Some known codes -------------------------
 
@@ -1007,24 +1008,24 @@ clean_xlat() {
 }
 
 read_xlat() {
-    local prog=$1  lang=$2
+    local prog=$1  lang=${2%%_*}
     local xdir=$LOCALE_DIR/xlat
     local fdir=$LOCALE_DIR/fonts
 
     local xlat=$xdir/en/$prog.xlat
     [ -r $xlat ] && . $xlat
 
-    [ "$lang" ] || return
+    # Always load a font
+    local font=$fdir/${lang:-default}
+    [ -e "$font" ] && log_cmd setfont $font -C $(tty)
 
-    lang=$(echo $lang | sed 's/_.*//')
+    [ "$lang" ] || return
 
     xlat=$xdir/$lang/$prog.xlat
     [ -r "$xlat" ] || return
     . $xlat
     vmsg 7 'Translate to %s' $lang
 
-    local font=$fdir/$lang
-    [ -e "$font" ] && log_cmd setfont $font -C $(tty)
 }
 
 do_welcome() {
@@ -2736,20 +2737,28 @@ initialize_cmdline2() {
 
 my_select_menu() {
     local dir=$BOOT_MENU_DIR menu=$DO_MENUS
+    unset MENU_VALUE
     [ "$menu" ] || return
 
     local title=$1 blurb=$2 cheat=$3  name=$4 dfile=$dir/$4.data mfile=$dir/$4.menu fields=$5
 
     [ -z "${menu##*$cheat*}" ] || return
 
+    local def_label
+    local data=$(cat $dfile)
+    mfile=$(xlat_mfile "$mfile" $LANG)
+
     if [ ! -e $dfile -o  ! -e $mfile ]; then
         [ "$BOOT_MENU_WARN" ] && warn "Missing $dfile or $mfile"
         return
     fi
 
-    local menu_value def_label
-    local data=$(cat $dfile)
-    local menu=$(cat $mfile | sed -r -e "s/( [0-9]+)(\))/$green\1$white\2$cyan/g" -e "s/\*/$bold_co*$cyan/g")
+    local default_str=$(rpad  "$_Default_" 16)
+    local menu=$(cat $mfile | sed -r \
+        -e "s/Default( {8}| *$)/$default_str/" \
+        -e "s/( [0-9]+)(\))/$green\1$white\2$cyan/g" \
+        -e "s/\*/$bold_co*$cyan/g" \
+        -e "s/\(([^)]+)\)/$nc_co(\1)$cyan/g")
 
     [ "$blurb"     ] && title="$title\n$blurb"
     [ "$fields"    ] && def_label=$(get_default_label "$fields" $dfile)
@@ -2757,30 +2766,36 @@ my_select_menu() {
     if [ "$def_label" ]; then
         title="$title\nCurrent default:$bold_co $def_label"
         data="0:reset\n$data"
-        menu="  ${green}0$white)$cyan Reset\n$menu"
+        menu="$(printf "  ${green}0$white)$cyan %s\n%s"  "$_Reset_" "$menu")"
     fi
 
-    my_select_2 "$title" menu_value 1 "$data" "$menu"
+    my_select_2 "$title" MENU_VALUE 1 "$data" "$menu"
 
     local new_label
-    [ "$menu_value" ] && new_label=$(egrep "^[0-9]+:$menu_value[: ]" $dfile | cut -d: -f3)
+    [ "$MENU_VALUE" ] && new_label=$(egrep "^[0-9]+:$MENU_VALUE[: ]" $dfile | cut -d: -f3)
 
-    case $menu_value in
+    case $MENU_VALUE in
         default) [ -n "$def_label" ] && msg  "$_Keeping_default_X_" "$(bq $def_label)"          ;;
               *) [ -n "$def_label" ] && msg  "$_Previous_default_X_erased_" "$(bq $def_label)"
                  PROC_CMDLINE=$(filter_cmdline "$fields" $PROC_CMDLINE)                      ;;
     esac
 
-    case $menu_value in
-        default|none)                                  ;;
-               reset) [ "$name" = lang ] && read_xlat  ;;
-
+    case $MENU_VALUE in
+        default|none|reset)                            ;;
                    *) [ -n "$new_label" ] && msg  "$_X_set_to_Y_" "$name" "$(bq $new_label)"
-                      cmdline="$cmdline $menu_value"   ;;
+                      cmdline="$cmdline $MENU_VALUE"   ;;
     esac
+}
 
-
-    eval $name=\$menu_value
+rpad() {
+    local str=$1 width=$2
+    local len=$(echo $str | wc -m)
+    local pad=$((width - len))
+    if [ $pad -le 0 ]; then
+        echo -n "$str"
+        return
+    fi
+    printf "%s%${pad}s" "$str" ""
 }
 
 get_default_label() {
@@ -2819,16 +2834,33 @@ filter_cmdline() {
     done
 }
 
+xlat_mfile() {
+    local file=$1 lang=${2%%_*}
+    echo "xlat_mfile: $lang $file" >> /mfile.log
+    test -e $file.$lang && echo found >> /mfile.log
+    if [ -n "$lang" -a -e $file.$lang ]; then
+        echo $file.$lang
+        return
+    fi
+    echo $file
+}
+
 do_early_menus() {
     local BOOT_MENU_DIR=/live/custom/$DISTRO_NAME/menus
-    local BOOT_MENU_WARN=true
+    local MENU_VALUE BOOT_MENU_WARN=true
     local lang time_zone option persist desktop
     local cmdline
-    my_select_menu 'Select Language' 'Languages are listed alphabetically'           l Language  "$_lang_"
-    [ "$lang" ] && read_xlat init ${lang##*=}
-    my_select_menu  "$_Select_Timezone_"            "$_Timezones_are_listed_by_longitude_"   t Timezone  "$_tz_"
-    my_select_menu  "$_Select_Option_"              "$_Only_one_option_can_be_selected_"     o Options  "$OPTIONS_ENTRIES"
-    my_select_menu  "$_Select_Persistence_Option_" ""                                    p Persist   "$_persist_frugal_frugal_"
+    my_select_menu 'Select Language'           'Languages are listed alphabetically'   l Language  "$_lang_"
+
+    case $MENU_VALUE in
+        lang=*) LANG=${MENU_VALUE#lang=}
+                read_xlat init $LANG       ;;
+         reset) read_xlat                  ;;
+    esac
+
+    my_select_menu  "$_Select_Timezone_"            "$_Timezones_are_listed_by_longitude_"     t Timezone  "$_tz_"
+    my_select_menu  "$_Select_Option_"              "$_Only_one_option_can_be_selected_"       o Options  "$OPTIONS_ENTRIES"
+    my_select_menu  "$_Select_Persistence_Option_" ""                                      p Persist   "$_persist_frugal_"
     #vmsg 6 "cmdline:$white $cmdline"
     [ ${#cmdline} -gt 0 ] && echo "$cmdline" >> /live/config/cmdline
 }
