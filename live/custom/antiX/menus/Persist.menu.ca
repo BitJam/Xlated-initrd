@@ -1,0 +1,10 @@
+   1)  Per omissió    
+   2)  persist-all     Persistència d'arrel i usuari (usa persist-save) 
+   3)  persist-root    Persistència només d'arrel (usa persist-save) 
+   4)  persist-static  Persistència d'arrel i usuari (més lent, però sense persist-save) 
+   5)  persist-home    Persistència només d'usuari 
+   6)  frugal-persist  Frugal, amb persistència d'arrel i usuari 
+   7)  frugal-root     Frugal, amb persistència només d'arrel 
+   8)  frugal-static   Frugal, amb persistència d'usuari i arrel estàtica 
+   9)  frugal-home     Frugal, només amb persistència d'usuari 
+  10)  frugal-only     Només Frugal, sense persistència 
