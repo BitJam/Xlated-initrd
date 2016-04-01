@@ -13,6 +13,8 @@
 
 export PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin
 
+OUT_FILE=/live/config/disabled
+
 VBOX_SERVICES="
 virtualbox-guest-utils
 virtualbox-guest-x11
@@ -83,6 +85,12 @@ MEAN_SERVICES="
     smbd
     nfs-kernel-server
     wicd
+    avahi-daemon
+"
+
+KBD_SERVICES="
+console-setup
+keyboard-setup
 "
 
 NO_DBUS_SERVICES="
@@ -100,39 +108,47 @@ prep_main() {
                exit 1   ;;
     esac
 
-    local must_run
+    local must_run param val
     : ${CMDLINE:=$(cat /live/config/proc-cmdline)}
     for param in $CMDLINE; do
+        val=${param#*=}
         case "$param" in
-            antiX=*|aX=*) antiX_param=${param#*=}; must_run=true ;;
-           disable_srv=*) antiX_param=${param#*=}; must_run=true ;;
-                nosysv=*) antiX_param=${param#*=}; must_run=true ;;
-       disable_service=*) antiX_param=${param#*=}; must_run=true ;;
-                    lean)        LEAN=true;        must_run=true ;;
-                    mean)        MEAN=true;        must_run=true ;;
-                Xtralean)   XTRA_LEAN=true;        must_run=true ;;
-                  nodbus)     NO_DBUS=true;        must_run=true ;;
-                    db++)   DEBUGGING=true                       ;;
+            antiX=*|aX=*) disable_param=$val   ; must_run=true ;;
+           disable_srv=*) disable_param=$val   ; must_run=true ;;
+                nosysv=*) disable_param=$val   ; must_run=true ;;
+       disable_service=*) disable_param=$val   ; must_run=true ;;
+               disable=*) disable_param=$val   ; must_run=true ;;
+                    lean)        LEAN=true;      must_run=true ;;
+                    mean)        MEAN=true;      must_run=true ;;
+                Xtralean)   XTRA_LEAN=true;      must_run=true ;;
+                  nodbus)     NO_DBUS=true;      must_run=true ;;
+                    db++)   DEBUGGING=true                     ;;
         esac
     done
 
-    DISABLE_NFS=true
-    local file export_files="/etc/exports"
-    for file in /etc/exports.d/*.exports ; do
-		[ -f "$file" ] && export_files="$export_files $file"
-	done
+    if test -x /etc/init.d/nfs-kernel-server; then
+        DISABLE_NFS=true
+        NFS_REASON="no exports"
 
-    [ -f /etc/exports ] && grep -q '^[[:space:]]*[^#]*/' $export_files && DISABLE_NFS=
+        local file export_files="/etc/exports"
+        for file in /etc/exports.d/*.exports ; do
+            [ -f "$file" ] && export_files="$export_files $file"
+        done
 
-    if [ "$antiX_param" ]; then
+        [ -f /etc/exports ] && grep -q '^[[:space:]]*[^#]*/' $export_files && DISABLE_NFS=
+    fi
+
+    if [ "$disable_param" ]; then
 
         # If the ## expression matches then the resulting string length is zero
-        [ "${antiX_param##*[lL]*}" ] ||          LEAN=true
-        [ "${antiX_param##*[mM]*}" ] ||          MEAN=true
-        [ "${antiX_param##*[xX]*}" ] ||     XTRA_LEAN=true
-        [ "${antiX_param##*[dD]*}" ] ||       NO_DBUS=true
-        [ "${antiX_param##*[vV]*}" ] ||  DISABLE_VBOX=true
-        [ "${antiX_param##*[nN]*}" ] ||   DISABLE_NFS=true
+        [ "${disable_param##*[lL]*}" ] ||          LEAN=true
+        [ "${disable_param##*[mM]*}" ] ||          MEAN=true
+        [ "${disable_param##*[xX]*}" ] ||     XTRA_LEAN=true
+        [ "${disable_param##*[dD]*}" ] ||       NO_DBUS=true
+        [ "${disable_param##*[vV]*}" ] ||  DISABLE_VBOX=true
+        [ "${disable_param##*[nN]*}" ] ||   DISABLE_NFS=true
+        [ "${disable_param##*[k]*}"  ] ||      FAST_KBD=true
+        [ "${disable_param##*[nN]*}" ] ||    NFS_REASON=n
     fi
 
     . /live/lib/live-init-utils.sh
@@ -169,38 +185,45 @@ main() {
         fi
 
         echo_live "$_Disabling_some_services_X_" "$(paren L, lean)"
-        disable_services "$LEAN_SERVICES"
+        disable_services "lean (l)" "$LEAN_SERVICES"
     fi
 
     if [ "$DISABLE_VBOX" ]; then
         echo_live "$_Disabling_X_services_Y_" "Virtual Box" "$(paren v)"
-        disable_services "$VBOX_SERVICES"
+        disable_services "vbox (v)" "$VBOX_SERVICES"
     fi
 
     if [ "$DISABLE_NFS" ]; then
-        echo_live "$_Disabling_X_services_" "NFS kernel server"
-        disable_services "$NFS_SERVICES"
+        echo_live "$_Disabling_NFS_server_X_" "$(paren $NFS_REASON)"
+        disable_services "nfs (n)" "$NFS_SERVICES"
     fi
 
     if [ "$MEAN" ]; then
         echo_live "$_Disabling_network_services_X_" "$(paren M, mean)"
-        disable_services "$MEAN_SERVICES"
+        disable_services "mean (m)" "$MEAN_SERVICES"
     fi
 
     if [ "$XTRA_LEAN" ]; then
         echo_live "$_Disabling_more_services_X_" "$(paren X, Xtralean)"
-        disable_services "$XTRA_LEAN_SERVICES"
+        disable_services "Xtralean (x)" "$XTRA_LEAN_SERVICES"
+    fi
+
+    if [ "$FAST_KBD" ]; then
+        echo_live "$_Disabling_keyboard_setup_X_" "$(paren k)"
+        disable_services "keyboard (k)" "$KBD_SERVICES"
     fi
 
     if [ "$NO_DBUS" ]; then
         echo_live "$_Disabling_X_services_Y_" "debus" "$(paren D, nodbus)"
-        disable_services "$NO_DBUS_SERVICES"
+        disable_services "nodbus (d)" "$NO_DBUS_SERVICES"
     fi
+
+    [ "$OUT" ] && echo "$OUT" | tr "," "\n" > $OUT_FILE
 }
 
 
 #----------------------------------------------------------------------------
-# function disable_services "$names" [ "$rc_dirs" ]
+# function disable_services "$name" "$services" [ "$rc_dirs" ]
 #
 # Temporarily disable services at boot-time by moving their /etc/rc?.d/
 # symlinks.  See also live-restore-services which is the script
@@ -214,61 +237,44 @@ main() {
 
 disable_services() {
 
-    local names="$1" rc_dirs="${2:-rc?.d}"
+    local name=$1 services="$2" rc_dirs="${3:-rc?.d}"
 
-    local rc_dir dest name slink moved length
+    local rc_dir dest service slink moved length
 
     for rc_dir in /etc/$rc_dirs; do
 
         dest=/live/config/disabled-rc.d/${rc_dir#/etc/}
         mkdir -p $dest
 
-        for name in $names; do
-            [ -z "${name###*}" ]  && continue
-            for slink in /$rc_dir/S*$name; do
+        local out
+        for service in $services; do
+            [ -z "${service###*}" ]  && continue
+            for slink in /$rc_dir/S*$service; do
                 [ -e "$slink" ] || continue
                 mv -f $slink $dest
 
-                #[ "$DEBUGGING" ] || continue
-
-                [ "$moved" ] || echo -n "    "
-
-                # Only print out each name once
+                # Only print out each service once
                 case ",$moved," in
-                    *,$name,*)
-                        continue;
-                        ;;
+                    *,$service,*) continue ;;
                 esac
 
-                # Wrap long lines
-                if [ "${#length}" -ge "60" ]; then
-                    unset length
-                    echo
-                    echo -n "    "
-                fi
-                length="$length $name"
-                moved="$moved,$name"
-                echo -n "${PARAM_COLOR}$name$NO_COLOR "
-
+                moved="$moved,$service"
             done
         done
     done
 
-    [ "$moved" ] && echo
+    OUT="$OUT${OUT:+,,}#----- $name -----$moved"
 
     [ "$DEBUGGING" ] || return
 
     local unused
-    for name in $names; do
+    for service in $services; do
         case ",$moved," in
-            *,$name,*)
-                continue
-                ;;
+            *,$service,*) continue ;;
         esac
-        unused="$unused $name"
+        unused="$unused $service"
     done
     [ "$unused" ] && echo_live '  Unused: %s' "$AMBER$unused"
-
 }
 
 prep_main "$@"
