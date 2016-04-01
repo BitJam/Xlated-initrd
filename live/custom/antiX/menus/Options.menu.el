@@ -1,4 +1,4 @@
-   1)  Default         
+   1)  Default
    2)  checkmd5        Ελέγξτε την ακεραιότητα του livecd/liveusb
    3)  checkfs         Ελέγξτε LiveUSB ext2/3/4 και συστήματα αρχείων persist
    4)  toram           Αντιγράψτε το συμπιεσμένο σύστημα αρχείων στη μνήμη RAM
