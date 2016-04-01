@@ -1,7 +1,7 @@
    1)  Per omissió
-   2)  persist_all     Persistència d'arrel i usuari (usa persist-save)
-   3)  persist_root    Persistència només d'arrel (usa persist-save)
-   4)  persist_static  Persistència d'arrel i usuari (més lent, però sense persist-save)
+   2)  persist_all     Fast. Saves root and home (uses RAM, saves at shutdown)
+   3)  persist_root    Fast. Only saves root (uses RAM, saves at shutdown)
+   4)  persist_static  Slow. Saves root and home (no RAM use, saves constantly)
    5)  persist_home    Persistència només d'usuari
    6)  frugal_persist  Frugal, amb persistència d'arrel i usuari
    7)  frugal_root     Frugal, amb persistència només d'arrel
