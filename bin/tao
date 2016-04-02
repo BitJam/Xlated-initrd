@@ -1,0 +1,28 @@
+#!/bin/sh
+
+PATH=/live/bin:/bin
+dir=/live/custom/tao
+
+rand_hex() {
+    dd if=/dev/urandom count=10 bs=1  2>/dev/null \
+        | md5sum | sed -r "s/(.{6}).*/0x\1/"
+}
+
+rand() {
+    echo $(($(rand_hex) % $1))
+}
+
+main() {
+    cnt=0
+    idx=$(head -n $(rand 32) $dir/tao.idx | tail -n1)
+    tail -n $((idx)) $dir/tao.txt | while read line; do
+        [ -z "${line##[1-9]*}" -o -z "${line##BOOK*}" ] && [ ${#line} -gt 0 ] && cnt=$((cnt + 1))
+        [ $cnt -gt 1 ] && break
+         echo "$line"
+    done
+}
+
+# tac tao.txt | egrep -n "^([1-9]|BOOK)" | cut -d: -f1 > tao.idx
+
+main
+

@@ -1,7 +1,7 @@
    1)  Por defecto
-   2)  persist_all     Persistencia de root y de home (usa persist-save)
-   3)  persist_root    Sólo persistencia de root (usa persist-save)
-   4)  persist_static  Persistencia de root y home (más lenta, sin persist-save)
+   2)  persist_all     Fast. Saves root and home (uses RAM, saves at shutdown)
+   3)  persist_root    Fast. Only saves root (uses RAM, saves at shutdown)
+   4)  persist_static  Slow. Saves root and home (no RAM use, saves constantly)
    5)  persist_home    Sólo persistencia de home
    6)  frugal_persist  Frugal con persistencia de root y home
    7)  frugal_root     Frugal con persistencia de root solamente

@@ -1,7 +1,7 @@
    1)  По умолчанию
-   2)  persist_all     Сохранение корневой ФС и домашнего каталога (использовать сохранение состояния)
-   3)  persist_root    Сохранение только файловой системы (использовать сохранение состояния)
-   4)  persist_static  Сохранение домашнего каталога и корневой ФС (медленнее, не использует сохранение состояния)
+   2)  persist_all     Fast. Saves root and home (uses RAM, saves at shutdown)
+   3)  persist_root    Fast. Only saves root (uses RAM, saves at shutdown)
+   4)  persist_static  Slow. Saves root and home (no RAM use, saves constantly)
    5)  persist_home    Сохранение состояния только домашнего каталога
    6)  frugal_persist  Упрощенная установка с сохранением корневой ФС и домашнего каталога
    7)  frugal_root     Упрощенная установка с сохранением только корневой ФС

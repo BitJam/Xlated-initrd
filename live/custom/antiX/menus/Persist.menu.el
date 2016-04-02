@@ -1,7 +1,7 @@
    1)  Default
-   2)  persist_all     root και home persist (persist-save)
-   3)  persist_root    Μονό root persist (persist-save)
-   4)  persist_static  Home και root persist (πιο αργή, αλλά χωρις persist-save)
+   2)  persist_all     Fast. Saves root and home (uses RAM, saves at shutdown)
+   3)  persist_root    Fast. Only saves root (uses RAM, saves at shutdown)
+   4)  persist_static  Slow. Saves root and home (no RAM use, saves constantly)
    5)  persist_home    Μονο home persist
    6)  frugal_persist  Frugal με root και home persisτ
    7)  frugal_root     Frugal με μόνο root persist
