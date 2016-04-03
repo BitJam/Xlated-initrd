@@ -1,7 +1,7 @@
    1)  Per omissió
-   2)  persist_all     Fast. Saves root and home (uses RAM, saves at shutdown)
-   3)  persist_root    Fast. Only saves root (uses RAM, saves at shutdown)
-   4)  persist_static  Slow. Saves root and home (no RAM use, saves constantly)
+   2)  persist_all     Ràpid. Desa root i home (usa la RAM, desa a l'aturada)
+   3)  persist_root    Ràpid. Només desa root (usa la RAM, desa a l'aturada)
+   4)  persist_static  Lent. Desa root i home (no usa la RAM, desa continuament)
    5)  persist_home    Persistència només d'usuari
    6)  frugal_persist  Frugal, amb persistència d'arrel i usuari
    7)  frugal_root     Frugal, amb persistència només d'arrel

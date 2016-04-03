@@ -88,11 +88,6 @@ MEAN_SERVICES="
     avahi-daemon
 "
 
-KBD_SERVICES="
-console-setup
-keyboard-setup
-"
-
 NO_DBUS_SERVICES="
     dbus
 "
@@ -147,7 +142,6 @@ prep_main() {
         [ "${disable_param##*[dD]*}" ] ||       NO_DBUS=true
         [ "${disable_param##*[vV]*}" ] ||  DISABLE_VBOX=true
         [ "${disable_param##*[nN]*}" ] ||   DISABLE_NFS=true
-        [ "${disable_param##*[k]*}"  ] ||      FAST_KBD=true
         [ "${disable_param##*[nN]*}" ] ||    NFS_REASON=n
     fi
 
@@ -173,6 +167,18 @@ main() {
             update-rc.d virtualbox-guest-x11   remove
         fi
     fi
+
+    # Turn on (off) lastlog info in console login if root persistence is (not) enabled
+    # Lastlog info is not useful on non-persistent system
+    local pam_file=/etc/pam.d/login
+    egrep -q '^[[[:space:]]*session[[:space:]]+[^[:space:]]+[[:space:]]+pam_lastlog.so[[:space:]]+silent' $pam_file
+    local silent_pam=$?
+    if grep -q "^PERSISTENCE=.*root" /live/config/initrd.out; then
+        [ $silent_pam -eq 0 ] && sed -r -i 's/^\s*(session\s+[^\s]+\s+pam_lastlog.so).*/\1/' $pam_file
+    else
+        [ $silent_pam -ne 0 ] && sed -i -r 's/^\s*(session\s+[^\s]+\s+pam_lastlog.so).*/\1 silent/' $pam_file
+    fi
+    disable_services "motd (no root persistence)" motd
 
     [ -z "$must_run" -o -n "$DISABLE_NFS" ] || exit 0
 
@@ -208,11 +214,6 @@ main() {
         disable_services "Xtralean (x)" "$XTRA_LEAN_SERVICES"
     fi
 
-    if [ "$FAST_KBD" ]; then
-        echo_live "$_Disabling_keyboard_setup_X_" "$(paren k)"
-        disable_services "keyboard (k)" "$KBD_SERVICES"
-    fi
-
     if [ "$NO_DBUS" ]; then
         echo_live "$_Disabling_X_services_Y_" "debus" "$(paren D, nodbus)"
         disable_services "nodbus (d)" "$NO_DBUS_SERVICES"
@@ -246,7 +247,6 @@ disable_services() {
         dest=/live/config/disabled-rc.d/${rc_dir#/etc/}
         mkdir -p $dest
 
-        local out
         for service in $services; do
             [ -z "${service###*}" ]  && continue
             for slink in /$rc_dir/S*$service; do

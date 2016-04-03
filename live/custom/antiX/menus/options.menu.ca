@@ -4,10 +4,10 @@
    4)  toram           Copia el sistema de fitxers comprimit a la RAM
    5)  from=usb        Acaba l'arrencada des de l'USB autònom
    6)  nousb2          Inhabilita tots els dispositius USB-2 en arrencar
-   7)  automount       Automatically mount devices when plugged in
-   8)  mount=usb       ... and mount all usb devices at boot time
-   9)  mount=all       ... and mount ALL devices at boot time
-  10)  mount=off       Disable all extra mounting
+   7)  automount       Munta els dispositius automàticament en connectar-los
+   8)  mount=usb       ... i munta tots els dispositius USB en arrencar
+   9)  mount=all       ... i munta TOTS els dispositius en arrencar
+  10)  mount=off       Inhabilita tots els muntatges extra
   11)  hwclock=ask     Deixa que el sistema ajudi a trobar la configuració de rellotge
   12)  hwclock=utc     El rellotge del maquinari usa UTC (sistemes amb només Linux)
   13)  hwclock=local   El rellotge de maquinari usa l'hora local (sistemes amb Windows)
