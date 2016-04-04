@@ -4,10 +4,10 @@
    4)  toram           Копировать сжатую ФС в RAM
    5)  from=usb        Завершить загрузку с Live USB
    6)  nousb2          Отключить все USB-2 устройства при загрузке
-   7)  automount       Automatically mount devices when plugged in
-   8)  mount=usb       ... and mount all usb devices at boot time
-   9)  mount=all       ... and mount ALL devices at boot time
-  10)  mount=off       Disable all extra mounting
+   7)  automount       Автоматически монтировать устройства при подключении
+   8)  mount=usb       ... И смонтировать все USB-устройства во время загрузки
+   9)  mount=all       ... И смонтировать ВСЕ устройства во время загрузки
+  10)  mount=off       Отключить монтирование всех внешних устройств
   11)  hwclock=ask     Система должна помочь определить настройки часов
   12)  hwclock=utc     Аппаратные часы используют UTC (только для Linux)
   13)  hwclock=local   Аппаратные часы используют местное время (Windows)
