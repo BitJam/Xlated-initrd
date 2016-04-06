@@ -458,11 +458,10 @@ main_core() {
     if [ "$DB_PLUS" ]; then
         local plus_t2=$(get_time)
         local delta=$(get_seconds $((plus_t2 - plus_t1)))
-        msg "$green@${cyan} Extras took$hi_co $delta${cyan} seconds"
+        vmsg 8 "$green@${cyan} Extras took$hi_co $delta${cyan} seconds"
     fi
 
-    rm -f $NEW_ROOT/etc/motd
-    test -e /issue && cp /issue $NEW_ROOT/etc/issue
+    test -e /$NEW_ROOT/etc/issue || cp /issue $NEW_ROOT/etc/issue
 
     # FIXME: do this after copy_xtra for easy testing (for now) (????)
     PROC_CMDLINE=$(cat /live/config/proc-cmdline)
@@ -956,16 +955,16 @@ list_modules() {
     list=$( echo $(lsmod | grep "^[a-z]" | cut -d" " -f1) | sort)
     cnt=$(echo $list | wc -w)
 
-    #. loaded <count> modules(s)
-    vmsg 6  "Loaded %s module(s)" $(nq $cnt)
+    # loaded <count> modules(s)
+    vmsg 6 'Loaded %s module(s)' $(nq $cnt)
 
     [ "$list" ] && vmsg 7 "$white$list"
 
     [ "$ERR_MODULES" ] || return
     local ecnt=$(echo "$ERR_MODULES" | wc -w)
 
-    #. <count> module(s) failed to load
-    vmsg 6  "%s module(s) failed to load" $(nq $ecnt)
+    # <count> module(s) failed to load
+    vmsg 6 '%s module(s) failed to load' $(nq $ecnt)
 
     vmsg 7 "$white$ERR_MODULES"
 
@@ -1058,28 +1057,28 @@ do_welcome() {
     local total_mem=$(mem_info MemTotal)
     local used_mem=$((total_mem - FREE_MEM))
 
-    vmsg 6 "$white  $(busybox | head -n 1)"
+    vmsg 8 "$white  $(busybox | head -n 1)"
 
-    [ -x /bin/ntfs-3g ] && vmsg 6 "$white  $(ntfs-3g --version 2>&1)"
+    [ -x /bin/ntfs-3g ] && vmsg 8 "$white  $(ntfs-3g --version 2>&1)"
 
     vmsg 6 "%25s: $white%s"  'initrd version' "$version"
     vmsg 6 "%25s: $white%s"  'initrd built'   "$v_date"
 
     # Print meminfo.
     local mem_format="${m_co}%s: $num_co%5d${m_co} M"
-    vmsg 6 "$mem_format"  '             Total Memory' $total_mem
+    vmsg 8 "$mem_format"  '             Total Memory' $total_mem
     # vmsg 6 "$mem_format"  '              Free Memory'  $FREE_MEM
-    vmsg 6 "$mem_format"  '              Used Memory'  $used_mem
+    vmsg 8 "$mem_format"  '              Used Memory'  $used_mem
 
     local cpu_format="%s:$white %s"
-    vmsg 6 "$cpu_format"  '             Linux kernel' "$(uname -r)"
-    vmsg 6 "$cpu_format"  '             Screen width' "$SCREEN_WIDTH"
-    vmsg 6 "$cpu_format"  '              Kernel arch' "$(uname -m)"
+    vmsg 8 "$cpu_format"  '             Linux kernel' "$(uname -r)"
+    vmsg 8 "$cpu_format"  '             Screen width' "$SCREEN_WIDTH"
+    vmsg 8 "$cpu_format"  '              Kernel arch' "$(uname -m)"
 
     local board_name board_vendor id_dir=/sys/class/dmi/id
     read board_name   2>/dev/null  < $id_dir/board_name
     read board_vendor 2>/dev/null  < $id_dir/board_vendor
-    vmsg 6 "$cpu_format"  '             Mother board' "$board_vendor $board_name"
+    vmsg 8 "$cpu_format"  '             Mother board' "$board_vendor $board_name"
 
     # vmsg 6  "$cpu_format" '                      CPU' "$(cpu_param 'model name' unknown)"
     # vmsg 6  "$cpu_format" '                    Cores' "$num_co$(cpu_param 'cpu cores'  1)"
@@ -1107,11 +1106,11 @@ show_bootcodes() {
 show_integer_errors() {
     local param name value params=$1
 
-    #. Only small integer values are allowed for <name>.  Will ignore <name=value>
+    # Only small integer values are allowed for <name>.  Will ignore <name=value>
     for param in $params; do
         name=${param%%=*}
         value=${param#*=}
-        warn  "Only small integer values are allowed for %s.  Will ignore %s" \
+        warn 'Only small integer values are allowed for %s.  Will ignore %s' \
             $(pqw $name) $(pqw $param)
     done
 }
@@ -1313,10 +1312,10 @@ from_filter() {
         esac
     done
 
-    #. Invalid <parameter-name> value(s) <bad values>
+    # Invalid <parameter-name> value(s) <bad values>
     [ "$invalid_scan" ] \
-        && _fatal "$(printf  "Invalid %s values(s) %s" "$(pqh from=)" "$(pqh $invalid_scan)")" \
-        "$(printf  "$_Valid_values_are_X_" "$(cq cd hd mmc usb all)")"
+        && _fatal "$(printf 'Invalid %s values(s) %s' "$(pqh from=)" "$(pqh $invalid_scan)")" \
+        "$(printf 'Valid values are %s' "$(cq cd hd mmc usb all)")"
 
     [ "$FILTERED_LIST" ]
 
@@ -1416,7 +1415,8 @@ _find_files() {
         #-- delay every time except inside first second
         if [ "$do_delay" ]; then
             if [ -z "$said_retry" ]; then
-                vmsgN 4  "$_Retry_for_X_seconds_" $(nq $retry_time)
+                #. Retry for <N> seconds <...>
+                vmsgN 4  "$_Retry_for_X_seconds_Y_" $(nq $retry_time) ""
                 vmsg_if $vthresh " ..."
                 said_retry=true
             fi
@@ -1424,7 +1424,7 @@ _find_files() {
             [ "$DO_COLDPLUG" ] && coldplug_modules
 
             # Normally just print out a dot for each iteration
-            [ "$be_verbose" ] || msgN $dot
+            [ "$be_verbose" ] || vmsgN 3 $dot
 
             # Adjust sleep time dynamically to account for previous time
             # through the loop
@@ -1461,7 +1461,7 @@ _find_files() {
 
             #. Scan <type> devices for <type> file(s) <file names>
             [ "$try" = "0" ] \
-                && vmsg 5  "$_Scan_X_devices_Look_for_Y_file_s_Z_"  $(dq $FROM_TYPE) $find_type "$(fq $short_files)"
+                && vmsg 4  "$_Scan_X_devices_Look_for_Y_file_s_Z_"  $(dq $FROM_TYPE) $find_type "$(fq $short_files)"
 
             DEVICE_LIST=$(most_block_devices)
 
@@ -1582,13 +1582,13 @@ _find_files() {
             for fname in $files; do
                 [ -f "$mntpnt/$fname" ] || continue
                 if [ "$mntpnt" = "$mp_orig" ]; then
-                    #. Mounted <type> <device> at <mount point>
+                    #. Mounted <type> device at <mount point>
                     vmsg 4  "$_Mounted_X_device_Mounted_device_Y_at_Z_" \
                         $find_type "$(fq $dev)" "${to_co}$mntpnt${m_co}"
 
                     local fstype=$(mntpnt_fstype $mntpnt)
                     #. <type> device filesystem: <filesystem-name>
-                    vmsg 5  "$_X_device_filesystem_Y_" $find_type \
+                    vmsg 6  "$_X_device_filesystem_Y_" $find_type \
                         "$(cq $fstype)"
 
                     case $find_type in
@@ -1599,8 +1599,8 @@ _find_files() {
                     local drive=$(echo $short_dev | sed -r 's/[0-9]+$//')
                     local model=$(cat /sys/block/$drive/device/model 2>/dev/null)
 
-                    #. <type> device model: <model-name>
-                    [ "$model" ] && vmsg 6  "%s device model: %s" $find_type "$(cq $model)"
+                    # <type> device model: <model-name>
+                    [ "$model" ] && vmsg 6 '%s device model: %s' $find_type "$(cq $model)"
 
                 else
                     rmdir $mp_orig
@@ -2068,7 +2068,7 @@ mount_overlayfs() {
     mkdir -p $aufs_mp $upper $work
 
     # Do the actual mount
-    vmsg 5  "Mount %s at %s" 'overlayfs' "$(fq $aufs_mp)"
+    vmsg 6 'Mount %s at %s' 'overlayfs' "$(fq $aufs_mp)"
 
     log_cmd mount -t overlay overlay -o "lowerdir=$sqfs_mp,upperdir=$upper,workdir=$work" $aufs_mp \
         || fatal  "$_Could_not_mount_X_" overlayfs
@@ -2138,9 +2138,11 @@ try_file_mount() {
 mount_tmpfs() {
     local mp=$1  size=$2  name=$3  opts=${4+,}$4
     mkdir -p $mp
-    vmsg 6  "Create %s at %s" "${hi_co}$name tmpfs${m_co}" "$(fq $mp) (${num_co}$size ${m_co}MB)"
-    log_cmd $LIVE_BIN/mount -t tmpfs -o size=${size}m$opts,noatime tmpfs $mp || return 1
-    return 0
+    local full_name=$(printf "%14s" "$name tmpfs")
+    local   full_mp=$(printf "%-20s" "$mp")
+    vmsg 8  "$_Create_X_at_Y_Z_" "${hi_co}$full_name${m_co}" "$(fq "$full_mp")" "(${num_co}$size ${m_co}MB)"
+    log_cmd $LIVE_BIN/mount -t tmpfs -o size=${size}m$opts,noatime tmpfs $mp
+    return $?
 }
 
 #==============================================================================
@@ -2519,7 +2521,7 @@ heading() {
 }
 
 log_cmd() {
-    vmsg_nc 7 "$*"
+    vmsg_nc 8 "$*"
     #"$@" >/dev/null
     "$@"
     return $?
@@ -2540,10 +2542,10 @@ _error() {
         #warn $hbar
         err "$type"
         #warn $hbar
-        [ "$1" ] && msg "${hi_co}$1"
+        [ "$1" ] && vmsg 1 "${hi_co}$1"
         shift
         for arg; do
-            msg "${hi_co}$arg"
+            vmsg 1 "${hi_co}$arg"
         done
         ### warn $hbar
         err
@@ -2736,10 +2738,10 @@ initialize_cmdline2() {
 
     local cmdline
     if [ ${#DISABLE_SERVICES} -gt 0 ]; then
-        [ -z "${DISABLE_SERVICES##*S*}" ] && cmdline="$cmdline${cmdline:+ }nostore"
+        [ -z "${DISABLE_SERVICES##*S*}" ] && cmdline="$cmdline${cmdline:+ }savestate"
         [ -z "${DISABLE_SERVICES##*s*}" ] && cmdline="$cmdline${cmdline:+ }nosavestate"
         [ -z "${DISABLE_SERVICES##*r*}" ] && cmdline="$cmdline${cmdline:+ }norepo"
-        [ -z "${DISABLE_SERVICES##*k*}" ] && cmdline="$cmdline${cmdline:+ }noloadkeys conkbd=us"
+        [ -z "${DISABLE_SERVICES##*k*}" ] && cmdline="$cmdline${cmdline:+ }noloadkeys"
         [ "$cmdline" ] && echo "$cmdline" >> /live/config/cmdline2
     fi
 }
@@ -2773,7 +2775,7 @@ my_select_menu() {
     [ "$fields"    ] && def_label=$(get_default_label "$fields" $dfile)
 
     if [ "$def_label" ]; then
-        title="$title\nCurrent default:$bold_co $def_label"
+        title=$(printf "$title\n%s:$bold_co %s"  "$_Current_default_" "$def_label")
         data="0:reset\n$data"
         menu="$(printf "  ${green}0$white)$cyan %s\n%s"  "$_Reset_" "$menu")"
     fi
@@ -2789,6 +2791,8 @@ my_select_menu() {
                  PROC_CMDLINE=$(filter_cmdline "$fields" $PROC_CMDLINE)                      ;;
     esac
 
+    #. <menu-name> set to <menu-value>
+    #. <Timezone> set to <Denver>
     case $MENU_VALUE in
         default|none|reset)                            ;;
                    *) [ -n "$new_label" ] && msg  "$_X_set_to_Y_" "$label" "$(bq $new_label)"
@@ -2859,7 +2863,7 @@ do_early_menus() {
     local MENU_VALUE BOOT_MENU_WARN=true
     local lang time_zone option persist desktop
     local cmdline
-    my_select_menu  "$_Select_Language_"            "$_Languages_are_listed_alphabetically_"   l lang  "$_Language_"  "$_lang_"
+    my_select_menu  "$_Select_Language_"            "$_Languages_are_listed_alphabetically_"   l lang  "$_Language_" 'lang=*'
 
     case $MENU_VALUE in
         lang=*) LANG=${MENU_VALUE#lang=}
@@ -2867,9 +2871,9 @@ do_early_menus() {
          reset) read_xlat                  ;;
     esac
 
-    my_select_menu  "$_Select_Timezone_"            "$_Timezones_are_listed_by_longitude_"     t tz       "$_Timezone_"     "$_tz_"
+    my_select_menu  "$_Select_Timezone_"            "$_Timezones_are_listed_by_longitude_"     t tz       "$_Timezone_"    'tz=*'
     my_select_menu  "$_Select_Option_"              "$_Only_one_option_can_be_selected_"       o options  "$_Options_"     "$OPTIONS_ENTRIES"
-    my_select_menu  "$_Select_Persistence_Option_" ""                                      p persist  "$_Persistence_"  "$_persist_frugal_"
+    my_select_menu  "$_Select_Persistence_Option_" ""                                      p persist  "$_Persistence_" 'persist-*|frugal-*'
     #vmsg 6 "cmdline:$white $cmdline"
     [ ${#cmdline} -gt 0 ] && echo "$cmdline" >> /live/config/cmdline
 }
@@ -2879,7 +2883,7 @@ do_late_menus() {
     local BOOT_MENU_WARN=
     local lang time_zone option persist desktop
     local cmdline
-    my_select_menu  "$_Select_Desktop_" "" d desktop  "$_Desktop_"  "$_desktop_desktheme_"
+    my_select_menu  "$_Select_Desktop_" "" d desktop  "$_Desktop_" 'desktop=*|desktheme=*'
 
     if [ "$REMASTERABLE" ]; then
         BOOT_MENU_DIR=/live/custom/$DISTRO_NAME/menus
@@ -3290,7 +3294,7 @@ free_space() {
         real=$(( $( stat -c %s $sparse) / 1024 / 1024))
         orig=$(du -m $sparse | cut -f1)
         new_free=$((free - $real + $orig))
-        printf  "$_sparse_r_X_o_Y_of_Z_nf_XX_YY_" $real $orig $free $new_free $sparse >> $MY_LOG
+        printf 'sparse: r=%4s o=%4s of=%5s nf=%5s %s\n' $real $orig $free $new_free $sparse >> $MY_LOG
         free=$new_free
     done
     [ $free -lt 0 ] && free=0
@@ -3617,8 +3621,8 @@ _copy_to_ram() {
         size_k="$(du -sk $ex_full | cut -f 1)"
         sq_size_k=$((sq_size_k + size_k))
         vmsg 8 "$format" $extra $size_k
-        #. Total [RAM needed]
-        vmsg 8 "$format2"  "          Total"  $sq_size_k
+        # Total [RAM needed]
+        vmsg 8 "$format2" '          Total'  $sq_size_k
     done
 
     # Extra space here does not waste ram
@@ -3628,8 +3632,8 @@ _copy_to_ram() {
 
     if [ "$sq_size_m" -gt "$FREE_MEM" ]; then
         err  "Not enough RAM available to do %s" $err_toram
-        #. Have <size> RAM, needed <size>
-        err  "have %s RAM, needed %s" "${num_co}$FREE_MEM ${m_co}M${err_co}" \
+        # Have <size> RAM, needed <size>
+        err 'have %s RAM, needed %s' "${num_co}$FREE_MEM ${m_co}M${err_co}" \
             "${num_co}$sq_size_m ${m_co}M"
         return 1
     fi
@@ -3829,9 +3833,9 @@ mount_persist_device() {
             *) warn  "Could not find persistence device"     ;;
         esac
 
-        #. Could not enable required <type> persistence
-        [ "$NEED_ROOTFS" ] && non_fatal  "Could not enable required %s persistence" $(pqh 'root!')
-        [ "$NEED_HOMEFS" ] && non_fatal  "Could not enable required %s persistence" $(pqh 'home!')
+        # Could not enable required <type> persistence
+        [ "$NEED_ROOTFS" ] && non_fatal 'Could not enable required %s persistence' $(pqh 'root!')
+        [ "$NEED_HOMEFS" ] && non_fatal 'Could not enable required %s persistence' $(pqh 'home!')
 
         unset WANT_ROOTFS WANT_HOMEFS NEED_ROOTFS NEED_HOMEFS
     fi
@@ -4131,7 +4135,7 @@ copy_persist_to_ram() {
          return 2
     fi
     local ram_used=$(used_space $AUFS_RAM_MP)
-    #. AUFS uses [this much RAM]
+    # AUFS uses [this much RAM]
     vmsg 7 "$format" '                     AUFS uses' $ram_used
     vmsg 7 "$format" '              Persistence uses' $persist_used
     vmsg 6 "${hi_co}%s"  "Copy persistent root to RAM succeeded"
@@ -4644,7 +4648,7 @@ run_init_scripts() {
         chroot $new_root $full start
         [ "$DB_PLUS" ] || continue
         now=$(get_time)
-        vmsg 6 "%25s @ %s seconds" $script $(pq $(get_seconds $((now - last_time))))
+        vmsg 8 "%25s @ %s seconds" $script $(pq $(get_seconds $((now - last_time))))
         last_time=$now
     done
 
