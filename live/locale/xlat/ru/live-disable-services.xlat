@@ -3,6 +3,7 @@ _Detected_laptop_mobile_device_="Обнаружен ноутбук/мобиль�
 _Disabling_NFS_server_X_="Отключение NFS сервера %s"
 _Disabling_X_services_="Отключение %s служб"
 _Disabling_X_services_Y_="Отключение %s служб %s"
+_Disabling_gpm_g_="Отключение gpm (g)"
 _Disabling_more_services_X_="Отключение других служб %s"
 _Disabling_network_services_X_="Отключение сетевых служб %s"
 _Disabling_some_services_X_="Отключение некоторых служб %s"

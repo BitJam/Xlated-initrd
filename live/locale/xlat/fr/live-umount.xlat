@@ -9,7 +9,6 @@ _Please_remove_the_disc_close_the_tray_="S'il vous plaît retirez le disque, fer
 _Ready_to_X_="Prêt pour %s"
 _Unable_to_kill_X_="Impossible d'arrêter: %s"
 _Unmount_most_filesystems_="Démonter plus de systèmes de fichiers"
-_X_Waiting_for_termination_="%s en attente pour terminer"
 _and_press_ENTER_to_continue_="et appuyez sur ENTRER pour continuer"
 _poweroff_="Arrêt"
 _reboot_="redémarrer"
