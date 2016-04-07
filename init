@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.54.02"
-           VERSION_DATE="Thu Apr  7 10:09:52 MDT 2016"
+                VERSION="7.54.03"
+           VERSION_DATE="Thu Apr  7 13:37:15 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -1509,7 +1509,7 @@ _find_files() {
 
             # pure window dressing
             if [ -z "$have_devices" ]; then
-                [ $try -gt 0 ] && vmsg 5
+                [ $try -gt 0 ] && vmsg 4
                 vmsg 5  "$_Filtered_devices_X_" "$white$DEVICE_LIST"
             else
                 vmsg_if $vthresh "%s Filtered devices %s" "$cnt_up" "$(pq $DEVICE_LIST)"
@@ -1606,6 +1606,7 @@ _find_files() {
 
             for fname in $files; do
                 [ -f "$mntpnt/$fname" ] || continue
+                #[ "$said_retry" ] && echo
                 if [ "$mntpnt" = "$mp_orig" ]; then
                     #. Mounted <type> device at <mount point>
                     vmsg 4  "$_Mounted_X_device_Mounted_device_Y_at_Z_" \
