@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.54.03"
-           VERSION_DATE="Thu Apr  7 13:37:15 MDT 2016"
+                VERSION="7.54.04"
+           VERSION_DATE="Fri Apr  8 16:26:13 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -35,6 +35,8 @@
            FRUGAL_RETRY=10
           PERSIST_RETRY=10
     FAILSAFE_BOOT_RETRY=30
+
+  DISABLE_SERVICES_OPTS="DLMPSXdgklmnrsvx"
 
            RW_MODE="ro"
        #DISTRO_NAME="Linux"
@@ -230,9 +232,8 @@ main_wrapper() {
     late_umount $PERSIST_DEVICE
     late_umount $SQFILE_DEV
 
-    #if confile remasterable; then
+    if [ -z "$DISABLE_STORE" ]; then
         if detect_old_persist_scripts $NEW_ROOT; then
-            DISABLE_STORE=true
             warn  "$_X_disabled_due_to_outdated_persistence_scripts_and_libs_" "$(pqw LiveUSB-Storage)"
         else
             confile remasterable && run_init_scripts $NEW_ROOT live-usb-storage
@@ -243,7 +244,7 @@ main_wrapper() {
 
             chmod 700 $NEW_ROOT/live
         fi
-    #fi
+    fi
 
     breakpoint 9 "right before starting init"
 
@@ -314,7 +315,7 @@ main_core() {
     do_welcome "$DISTRO_PRETTY_NAME" "$VERSION" "$VERSION_DATE"
     show_bootcodes "$(live_param_filter $UNKNOWN_BOOTCODES)"
     show_integer_errors "$INTEGER_ERRORS"
-
+    show_disable_errors "$DISABLE_SERVICES" "$DS_PARAM"
     breakpoint 2 "before coldplug"
 
     check_unionfs
@@ -704,7 +705,9 @@ read_cmdline_params()
                        fatuid=*) any_int USER_UID $param                         ;;
                        fatgid=*) any_int USER_GID $param                         ;;
 
-             disable=*|nosysv=*) DISABLE_SERVICES="$DISABLE_SERVICES$value"      ;;
+             disable=*|nosysv=*) DISABLE_SERVICES="$DISABLE_SERVICES$value" ; DS_PARAM=$param  ;;
+
+                   disablestore) DISABLE_STORE=true                              ;;
 
         #----- These get interpreted late but we don't want them to be unknown
                 hwclock=*|hwc=*)  ;;
@@ -897,6 +900,11 @@ read_cmdline_params()
        BOOT_RETRY=${CMD_BOOT_RETRY:-$BOOT_RETRY}
      FRUGAL_RETRY=${CMD_FRUGAL_RETRY:-$FRUGAL_RETRY}
     PERSIST_RETRY=${CMD_PERSIST_RETRY:-$PERSIST_RETRY}
+
+    if [ "$DISABLE_STORE" ]; then
+        USER_UID=0
+        USER_GID=0
+    fi
 }
 
 
@@ -1140,6 +1148,14 @@ show_integer_errors() {
         warn 'Only small integer values are allowed for %s.  Will ignore %s' \
             $(pqw $name) $(pqw $param)
     done
+}
+
+show_disable_errors() {
+    local codes=$1  ds_param=$2
+    [ -n "$codes" ] || return
+    local bad=$(echo "$codes" | sed -r "s/[$DISABLE_SERVICES_OPTS]+//g")
+    [ -n "$bad" ] || return
+    warn  "$_Unknown_options_in_X_Unknown_options_Y_" "$(pqw $ds_param)" "$(pqw $bad)"
 }
 
 cpu_param() {
