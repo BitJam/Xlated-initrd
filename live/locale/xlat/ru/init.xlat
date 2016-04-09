@@ -109,6 +109,7 @@ _This_default_size_will_leave_X_Meg_free_="Размер по умолчанию 
 _Timezone_="Часовой пояс"
 _Timezones_are_listed_by_longitude_="Часовые пояса по долготе"
 _Unknown_command_="Неизвестная команда"
+_Unknown_option_s_in_X_Unknown_option_s_Y_="Неизвестный параметр(ы) в %s. Неизвестный параметр(ы): %s"
 _Unmount_successful_="Отмонтировано успешно"
 _Update_label_on_X_from_Y_to_Z_="Обновить метку %s с %s на %s"
 _Valid_X_="Годится %s"

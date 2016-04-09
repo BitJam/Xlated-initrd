@@ -106,6 +106,7 @@ _This_default_size_will_leave_X_Meg_free_="Denna standardstorlek lämnar %s Meg 
 _Timezone_="Tidszon"
 _Timezones_are_listed_by_longitude_="Tidszonerna är listade efter longitude"
 _Unknown_command_="Okänt kommando"
+_Unknown_option_s_in_X_Unknown_option_s_Y_="Okänd(a) alternativ i %s. Okänd(a) alternativ: %s"
 _Unmount_successful_="Avmontering lyckades"
 _Update_label_on_X_from_Y_to_Z_="Uppdatera beteckning på %s från %s till %s"
 _Valid_X_="Giltig %s"

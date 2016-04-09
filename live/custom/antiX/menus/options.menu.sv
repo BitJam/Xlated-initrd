@@ -13,6 +13,6 @@
   13)  hwclock=local   Hårdvaru-klocka använder lokal tid (Windows system)
   14)  private         Ändra lösenord före start
   15)  nostore         Stäng av LiveUSB-lagringsanvändning
-  16)  dostore         Enable LiveUSB-Storage feature
+  16)  dostore         Använd LiveUSB-Lagring
   17)  savestate       Spara en del filer vid omstarter (Endast LiveUSB)
   18)  nosavestate     Spara inte filer vid omstarter (Endast LiveUSB)

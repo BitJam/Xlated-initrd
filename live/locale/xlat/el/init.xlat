@@ -108,6 +108,7 @@ _This_default_size_will_leave_X_Meg_free_="Αυτό το προεπιλεγμέ�
 _Timezone_="Ζώνη ώρας:"
 _Timezones_are_listed_by_longitude_="Οι ζώνες ώρας αναφέρονται από το γεωγραφικό μήκος"
 _Unknown_command_="Άγνωστη εντολή"
+_Unknown_option_s_in_X_Unknown_option_s_Y_="Άγνωστη επιλογή(ες) σε %s. Άγνωστη επιλογή(ες): %s"
 _Unmount_successful_="Unmount επιτυχής"
 _Update_label_on_X_from_Y_to_Z_="Ενημέρωση ετικέτα στο %s από %s σε %s"
 _Valid_X_="Έγκυρα %s"
