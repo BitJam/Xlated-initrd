@@ -13,5 +13,6 @@
   13)  hwclock=local   Hardware klok gebruikt lokale tijd (Windows systemen)
   14)  private         Wijzig wachtwoorden voor het opstarten
   15)  nostore         Schakel LiveUSB-Opslag optie uit
-  16)  savestate       Sla enkele bestanden op over het herstarten (enkel LiveUSB)
-  17)  nosavestate     Geen bestanden over herstarten opslaan (enkel LiveUSB)
+  16)  dostore         Enable LiveUSB-Storage feature
+  17)  savestate       Sla enkele bestanden op over het herstarten (enkel LiveUSB)
+  18)  nosavestate     Geen bestanden over herstarten opslaan (enkel LiveUSB)

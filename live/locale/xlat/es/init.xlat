@@ -109,6 +109,7 @@ _This_default_size_will_leave_X_Meg_free_="Este tamaño por defecto dejará %s M
 _Timezone_="Zona horaria"
 _Timezones_are_listed_by_longitude_="Las zonas horarias se listan por la longitud"
 _Unknown_command_="Orden desconocida"
+_Unknown_option_s_in_X_Unknown_option_s_Y_="Opción desconocida(s) en %s.  Opción desconocida(s): %s"
 _Unmount_successful_="Desmontaje exitoso"
 _Update_label_on_X_from_Y_to_Z_="Actualizar etiqueta en %s de %s a %s"
 _Valid_X_="Válido %s"

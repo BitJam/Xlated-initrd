@@ -13,5 +13,6 @@
   13)  hwclock=local   Hardware-Uhr nutzt lokale Zeit (Windows-Systeme)
   14)  private         Ändere Passwörter vor dem Bootvorgang
   15)  nostore         Deaktiviere Speicherung auf dem LiveUSB
-  16)  savestate       Speicherung von Dateien zwischen den Sitzungen ermöglichen (nur bei LiveUSB)
-  17)  nosavestate     Keine Speicherung von Dateien zwischen den Sitzungen (nur bei LiveUSB)
+  16)  dostore         Enable LiveUSB-Storage feature
+  17)  savestate       Speicherung von Dateien zwischen den Sitzungen ermöglichen (nur bei LiveUSB)
+  18)  nosavestate     Keine Speicherung von Dateien zwischen den Sitzungen (nur bei LiveUSB)
