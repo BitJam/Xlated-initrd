@@ -13,5 +13,6 @@
   13)  hwclock=local   El reloj del hardwaree usa la hora local (sistemas Windows)
   14)  private         Cambiar las contraseñas antes de iniciar
   15)  nostore         Deshabilitar la función de guardado en LiveUSB
-  16)  savestate       Guardar algunos archivos entre reinicios (sólo LiveUSB)
-  17)  nosavestate     Do guardar archivos entre reinicios (sólo LiveUSB)
+  16)  dostore         Habilitar almacenamiento LiveUSB
+  17)  savestate       Guardar algunos archivos entre reinicios (sólo LiveUSB)
+  18)  nosavestate     Do guardar archivos entre reinicios (sólo LiveUSB)
