@@ -13,6 +13,6 @@
   13)  hwclock=local   Ρολόι σε τοπική ώρα (Windows)
   14)  private         Αλλαγή του κωδικού πρόσβασης πριν εκκίνηση
   15)  nostore         Απενεργοποίηση του LiveUSB-αποθήκευσης
-  16)  dostore         Enable LiveUSB-Storage feature
+  16)  dostore         Ενεργοποίηση του LiveUSB-αποθήκευσης
   17)  savestate       Αποθήκευση κάποιων αρχείων σε επανεκκίνηση (LiveUSB μόνο)
   18)  nosavestate     Μην αποθηκεύετε αρχεία σε επανεκκίνηση (LiveUSB μόνο)

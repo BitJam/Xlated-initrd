@@ -13,6 +13,6 @@
   13)  hwclock=local   El rellotge de maquinari usa l'hora local (sistemes amb Windows)
   14)  private         Canvieu les contrasenyes abans d'arrencar
   15)  nostore         Inhabilita la característica d'emmagatzematge d'USB autònom
-  16)  dostore         Enable LiveUSB-Storage feature
+  16)  dostore         Activa l'opció d'emmagatzematge LiveUSB
   17)  savestate       Desa alguns fitxers entre arrencades (només USB autònom)
   18)  nosavestate     No desis fitxers entre arrencades (només USB autònom)

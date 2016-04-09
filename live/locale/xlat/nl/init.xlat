@@ -107,6 +107,7 @@ _This_default_size_will_leave_X_Meg_free_="Deze standaardgrootte zal %s Meg vrij
 _Timezone_="Tijdzone"
 _Timezones_are_listed_by_longitude_="Tijdzones worden weergegeven per lengtegraad"
 _Unknown_command_="Onbekend commando"
+_Unknown_option_s_in_X_Unknown_option_s_Y_="Onbekende optie(s) in %s. Onbekende optie(s): %s"
 _Unmount_successful_="Ontkoppelen geslaagd"
 _Update_label_on_X_from_Y_to_Z_="Update het label op %s van %s naar %s"
 _Valid_X_="Geldig %s"

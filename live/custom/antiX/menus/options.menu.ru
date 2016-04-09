@@ -13,6 +13,6 @@
   13)  hwclock=local   Аппаратные часы используют местное время (Windows)
   14)  private         Изменить пароль перед загрузкой
   15)  nostore         Отключить функцию сохранения LiveUSB
-  16)  dostore         Enable LiveUSB-Storage feature
+  16)  dostore         Включить функцию сохранения LiveUSB
   17)  savestate       Сохранить некоторые файлы после перезагрузки (только Live USB)
   18)  nosavestate     Не сохранять файлы после перезагрузки (только LiveUSB)
