@@ -9,6 +9,7 @@ _Please_remove_the_disc_close_the_tray_="Si us plau, traieu el disc i tanqueu la
 _Ready_to_X_="A punt de %s"
 _Unable_to_kill_X_="No es pot matar: %s"
 _Unmount_most_filesystems_="Desmuntant la majoria de sistemes de fitxers"
+_X_Waiting_for_termination_Y_="%s Esperant per la terminació de %s"
 _and_press_ENTER_to_continue_="i premeu ENTER per continuar"
 _poweroff_="apagar"
 _reboot_="Arrenca de nou"
