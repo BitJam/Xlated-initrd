@@ -56,13 +56,14 @@ for param in $CMDLINE; do
 
 automount=off|amnt=off)                          AUTOMOUNT_OFF=true ;;
         automount|amnt)                              AUTOMOUNT=true ;;
-    automount=*|amnt=*)    CMD_MOUNT=$value ;        AUTOMOUNT=true ;;
-               mount=*)    CMD_MOUNT=$value ;        AUTOMOUNT=true ;;
-               fstab=*)    CMD_FSTAB=$value                         ;;
-                splash) SPLASH_PARAM=v                              ;;
-              splash=*) SPLASH_PARAM=$value                         ;;
-           desktheme=*) DESK_THEME=$value                           ;;
-                norepo) NO_REPO=true                                ;;
+    automount=*|amnt=*)     CMD_MOUNT=$value ;       AUTOMOUNT=true ;;
+               mount=*)     CMD_MOUNT=$value ;       AUTOMOUNT=true ;;
+               fstab=*)     CMD_FSTAB=$value                        ;;
+                splash)  SPLASH_PARAM=v                             ;;
+              splash=*)  SPLASH_PARAM=$value                        ;;
+           desktheme=*)    DESK_THEME=$value                        ;;
+                norepo)       NO_REPO=true                          ;;
+           deskdelay=*) DESKTOP_DELAY=$value                        ;;
     esac
 done
 
@@ -126,10 +127,13 @@ do_start() {
             detect_any_video_driver
         fi
 
-        set_dpi $CMD_DPI
+        set_server_dpi $CMD_DPI
 
         make_xorg_conf "$XORG_ARGS" "$FOUND_VDRIVER"
         HAVE_X=true
+
+        [ "$DESKTOP_DELAY" ] && adjust_desktop_delay $DESKTOP_DELAY
+
     fi
 
     # Find the "default" user.  This is usually "demo" but can vary on snapshots
@@ -154,6 +158,7 @@ do_start() {
 
     set_default_desktop "$CMD_DESKTOP" $DEF_USER $USER_HOME
     set_desktop_theme   "$DESK_THEME"  $DEF_USER $USER_HOME
+    set_user_dpi        "$CMD_DPI"     $DEF_USER $USER_HOME
 
     #localize_firefox $LANG
 }
@@ -361,6 +366,19 @@ set_utc_local() {
     esac
 }
 
+adjust_desktop_delay() {
+    local delay=${1:-0}
+    local ds_conf=/etc/desktop-session/desktop-session.conf
+    test -e $ds_conf || return
+    local bad=$(echo $delay | sed -r 's/^([0-9]+(\.[0-9]*)?|.[0-9]+)//')
+
+    if [ ${#bad} -gt 0 ]; then
+        error "$_Bady_delay_parameter_X_" $(pquote $delay)
+        return
+    fi
+    echo_live "$_Setting_desktop_delay_to_X_" $(pquote $delay)
+    sed -r -i "s/^\s*(STARTUP_DELAY=).*/\1$delay/" $ds_conf
+}
 
 #-------------------------------------------------------------------------------
 # XORG and VIDEO stuff
@@ -526,12 +544,26 @@ detect_sisimedia_driver() {
     XORG_ARGS="${XORG_ARGS:-default,$xorg_driver}"
 }
 
-set_dpi() {
+scale_conky() {
+    local dpi=$1  user=$2  home=$3
+    local file=/$home/.conkyrc  def_width=180  def_gheight=30
+    [ "$dpi" ] || return
+    test -w $file || return
+    local width=$((dpi * $def_width / 96 ))
+    [ $width -gt $def_width ] || return
+    echo_live "$_Setting_Conky_width_to_X_" $(pquote $width)
+    local width2=$((width - 10))
+    local gheight=$((2 * dpi * $def_gheight / 96 - $def_gheight))
+
+    su -c "sed -i -r -e 's/^\s*(maximum_width\s+).*/\1$width/' -e 's/$def_gheight, ?170/$gheight,$width2/' $file" $user
+}
+
+set_server_dpi() {
     local dpi=$1
     [ "$dpi" ] || return
 
     if ! echo $dpi | grep -q "^[[:digit:]]\+$"; then
-        error "$_Invalid_X_boot_parameter_Y_" $(pquote dpi) $(pquote $dpi)
+        error "$_Invalid_X_boot_parameter_Y_" "$(pquote server dpi)" $(pquote $dpi)
         return
     fi
 
@@ -548,6 +580,22 @@ set_dpi() {
         sed -i -r "s/^#?\s*(xserver-command=X).*/\1 -dpi $dpi/" $file
     done
 }
+
+set_user_dpi() {
+    local dpi=$1  user=$2  home=$3
+    [ "$dpi" ] || return
+
+    echo_live "$_Setting_X_to_Y_" "$(pquote user dpi)" $(pquote $dpi)
+    if ! echo $dpi | grep -q "^[[:digit:]]\+$"; then
+        error "$_Invalid_X_boot_parameter_Y_" $(pquote dpi) $(pquote $dpi)
+        return
+    fi
+
+    add_or_edit "^[ !]*Xft.dpi:" "Xft.dpi: $dpi" $home/.Xresources $user create
+
+    scale_conky "$dpi" "$user" $home
+}
+
 
 
 #-------------------------------------------------------------------------------
@@ -611,7 +659,6 @@ localize_firefox() {
     done
 }
 
-
 #-------------------------------------------------------------------------------
 # UTILITIES
 #-------------------------------------------------------------------------------
@@ -633,6 +680,20 @@ move_if() {
     test -e $f1 || return
     mkdir -p $(dirname $f2)
     mv -f $f1 $f2
+}
+
+add_or_edit() {
+    local where=$1  line=$2  file=$3  user=$4 create=$5
+    if ! test "$file"; then
+        [ "$create" ] && echo  "$line" | su -c "tee $file" $user
+        return
+    fi
+
+    if grep -iq "$where" "$file"; then
+        sed -i -r "/$where/I s|.*|$line|" $file
+        return
+    fi
+    su -c "sed -i '1 i$line' $file" $user
 }
 
 #-------------------------------------------------------------------------------
