@@ -35,7 +35,9 @@ for param in $CMDLINE; do
             noloadkeys)    NO_LOAD_KEYS=true                        ;;
                    db+)      DB_PLUS=true                           ;;
              desktop=*)  CMD_DESKTOP=$value                         ;;
-                 dpi=*)      CMD_DPI=$value                         ;;
+                 dpi=*)     CMD_SDPI=$value ;       CMD_UDPI=$value ;;
+                sdpi=*)     CMD_SDPI=$value                         ;;
+                udpi=*)     CMD_UDPI=$value                         ;;
                  kbd=*)      CMD_KBD=$value ;          DO_XKBD=true ;;
                kbopt=*)   XKBOPTIONS=$value ;          DO_XKBD=true ;;
                kbvar=*)   XKBVARIANT=$value ;          DO_XKBD=true ;;
@@ -64,6 +66,7 @@ automount=off|amnt=off)                          AUTOMOUNT_OFF=true ;;
            desktheme=*)    DESK_THEME=$value                        ;;
                 norepo)       NO_REPO=true                          ;;
            deskdelay=*) DESKTOP_DELAY=$value                        ;;
+             nomodeset)     NOMODESET=true                          ;;
     esac
 done
 
@@ -127,7 +130,7 @@ do_start() {
             detect_any_video_driver
         fi
 
-        set_server_dpi $CMD_DPI
+        set_server_dpi $CMD_SDPI
 
         make_xorg_conf "$XORG_ARGS" "$FOUND_VDRIVER"
         HAVE_X=true
@@ -158,7 +161,7 @@ do_start() {
 
     set_default_desktop "$CMD_DESKTOP" $DEF_USER $USER_HOME
     set_desktop_theme   "$DESK_THEME"  $DEF_USER $USER_HOME
-    set_user_dpi        "$CMD_DPI"     $DEF_USER $USER_HOME
+    set_user_dpi        "$CMD_UDPI"    $DEF_USER $USER_HOME
 
     #localize_firefox $LANG
 }
@@ -552,10 +555,11 @@ scale_conky() {
     local width=$((dpi * $def_width / 96 ))
     [ $width -gt $def_width ] || return
     echo_live "$_Setting_Conky_width_to_X_" $(pquote $width)
-    local width2=$((width - 10))
+    local gwidth=$((width - 10))
     local gheight=$((2 * dpi * $def_gheight / 96 - $def_gheight))
 
-    su -c "sed -i -r -e 's/^\s*(maximum_width\s+).*/\1$width/' -e 's/$def_gheight, ?170/$gheight,$width2/' $file" $user
+    su -c "sed -i -r -e 's/^\s*(maximum_width\s+).*/\1$width/' \
+        -e 's/(graph +[a-z0-9]+\s+)[0-9]+\s*,\s*[0-9]+/\1$gheight,$gwidth/' $file" $user
 }
 
 set_server_dpi() {
