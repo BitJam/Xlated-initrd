@@ -133,7 +133,8 @@ for param in $(cat /proc/cmdline); do
         uverb=*|xres=*|noxorg);;
         desktheme=*) ;;
         nosavestate|savestate|dbsavestate) ;;
-        conky=[0-9]) ;;
+        deskdelay=*) ;;
+        udpi=*|sdpi=*) ;;
 
         *) printf "$param "
     esac
