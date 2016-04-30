@@ -614,7 +614,7 @@ set_user_desktop_delay() {
         return
     fi
     echo_live "$_Setting_desktop_delay_to_X_" $(pquote $delay)
-    su -c "sed -r -i 's/^\s*(STARTUP_DELAY=).*/\1$delay/' $ds_conf"
+    su -c "sed -r -i 's/^\s*(STARTUP_DELAY=).*/\1$delay/' $ds_conf" $user
 }
 
 
