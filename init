@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.54.09"
-           VERSION_DATE="Tue Apr 26 02:50:27 MDT 2016"
+                VERSION="7.54.10"
+           VERSION_DATE="Sat Apr 30 21:03:41 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -213,6 +213,7 @@ main_wrapper() {
 
     breakpoint 8      "before running live init.d scripts"
     breakpoint bash8  "Bash shell before running live init.d scripts"
+    breakpoint b8     "Bash shell before running live init.d scripts"
 
     # Try running live-usb-save first so it can restore an xorg.conf machine-state file
     confile remasterable && LIVE_SCRIPTS="live-usb-save $LIVE_SCRIPTS"
@@ -247,8 +248,9 @@ main_wrapper() {
         fi
     fi
 
-    breakpoint bash "Bash shell right before starting init"
-    breakpoint 9    "right before starting init"
+    breakpoint bash9 "Bash shell right before starting init"
+    breakpoint b9    "Bash shell right before starting init"
+    breakpoint 9     "right before starting init"
 
     stop_hotplug
 
@@ -1014,7 +1016,7 @@ select_breakpoints() {
             echo
             echo "${m_co}Remaining ${hi_co}$ME$m_co breakpoints:$nc_co"
             echo
-            sed -rn 's/^\s*breakpoint ([1-9a-z][0-9a-z]?\>/  \1)/p' $0 | sed "s/['\"]//g" | sort
+            sed -rn 's/^\s*breakpoint ([1-9a-z])\>/  \1)/p' $0 | sed "s/['\"]//g" | sort
             echo
             echo "${m_co}Use \"a\" to set most breakpoints$nc_co"
             echo "${m_co}Use \"A\" to set all breakpoints$nc_co"
@@ -2395,7 +2397,7 @@ breakpoint() {
     should_break_at $bp || return
 
     case $bp in
-        bash*) do_bash_chroot ; return ;;
+        bash*|b[1-9]) do_bash_chroot $bp ; return ;;
     esac
 
     echo "$green$tbar$nc_co"
@@ -2416,7 +2418,8 @@ do_bash_chroot() {
     local rc_file=/root/chrootrc bp=${1:-bash} root_dir=${2:-$NEW_ROOT}
 
     cat<<Chroot_RC > $root_dir$rc_file
-alias shutdown="touch /shutdown; exit &>/dev/null"
+alias shutdown="touch /poweroff; exit &>/dev/null"
+alias poweroff="touch /poweroff; exit &>/dev/null"
 alias reboot="touch /reboot; exit &>/dev/null"
 source /root/.bashrc
 rm $rc_file
@@ -2427,13 +2430,13 @@ Chroot_RC
     echo "$green    Use the$white exit$green command or press$white Ctrl-d$green to boot"
     echo "$green    Use$white poweroff$green and$white reboot$green to poweroff and reboot"
 
-    rm -f $root_dir/shutdown $/root_dir/reboot
+    rm -f $root_dir/poweroff $/root_dir/reboot
     setsid cttyhack aufs-chroot bash --init-file $rc_file
-    local do_shutdown do_reboot
-    test -e $root_dir/shutdown && do_shutdown=true
+    local do_poweroff do_reboot
+    test -e $root_dir/poweroff && do_poweroff=true
     test -e $root_dir/reboot   && do_reboot=true
-    rm -f $root_dir/shutdown $root_dir/reboot
-    [ "$do_shutdown" ] && safe-shutdown
+    rm -f $root_dir/poweroff $root_dir/reboot
+    [ "$do_poweroff" ] && safe-poweroff
     [ "$do_reboot" ]   && safe-reboot
 }
 
@@ -3677,7 +3680,7 @@ copy_to_ram() {
         mountpoint -q $toram_mp && log_cmd umount $toram_mp
         [ -d $toram_mp ]        && rmdir $toram_mp
     fi
-    breakpoint tr "After copy to ram"
+    breakpoint t "After copy to ram"
 }
 
 _copy_to_ram() {
