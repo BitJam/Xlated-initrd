@@ -168,6 +168,7 @@ do_start() {
     eval "USER_HOME=~$DEF_USER"
 
     if [ -z "$DEF_USER" -o -z "${USER_HOME##~*}" ]; then
+        #. No default user <USER-NAME> found on the system.
         echo_live "$_No_default_user_X_found_on_the_system_" "$(pquote $DEF_USER)"
         return
     fi
@@ -247,6 +248,7 @@ automount_and_fstab() {
             fstab_opt="$fstab_opt --mount=$CMD_MOUNT" ;;
 
         ,)  ;;
+            #. Invalid <mount/automount> option <invalid-option>
         *)  error "$_Invalid_X_option_Y_" 'mount/automount' $(pquote $CMD_MOUNT) ;;
     esac
 
@@ -305,7 +307,7 @@ localize_skel() {
         error "$_Directory_not_found_X_" $from
         return
     fi
-
+    #. Localizing menus to <language> in </etc/skel>
     echo_live "$_Localizing_menus_to_X_in_Y_" $(pquote $0) $(pquote $dest)
 
     # Basically a cp -a but make all top level files and directories hidden
@@ -369,6 +371,7 @@ localize_repo() {
     local verbose
     [ "$DB_PLUS" ] && verbose=--verbose
 
+    #. Localizing source repos using <timezone|country-code>
     echo_live "$_Localizing_source_repos_using_X_" $(pquote $arg)
     localize-repo $verbose $arg
 }
@@ -377,6 +380,7 @@ set_utc_local() {
     local new=$1 file=/etc/adjtime
     [ "$new" ] || return
 
+    #. Assuming <hwclock> is set to <utc|local> time
     echo_live "$_Assuming_X_is_set_to_Y_time_" hwclock $(pquote $new)
 
     #grep -i -q $new $file && return
@@ -443,7 +447,9 @@ make_xorg_conf() {
     [ -e /live/config/virtualbox ] && no_default=true
 
     if [ -z "$nomodeset" -a -n "$found_kms_driver" -a -n "$safe_mode" ]; then
-        echo_live "$_Disabling_safe_mode_because_of_X_" "$(pquote "$found_kms_driver video driver(s)")"
+        #. Note: KMS means "kernel mode switching"
+        #. Disabling safe mode because of KMS <video-driver> video hardware
+        echo_live "$_Disabling_safe_mode_because_of_KMS_X_video_hardware_" "$(pquote $found_kms_driver)"
         args=$(echo $args | sed "s/\<safe\>//g")
         safe_mode=
     fi
@@ -460,17 +466,20 @@ make_xorg_conf() {
     if [ "$FOUND_i915" -a -z "$no_xorg" ]; then
         local arch=$(uname -m)
         if [ $arch = x86_64 ] && need_uxa; then
+
+            #. Forcing <acceleration-type> acceleration on <cpu-type>
             echo_live "$_Forcing_X_acceleration_on_Y_" $(pquote uxa) $(pquote pre-sandybridge)
             args=uxa${args:+,}$args
 
         elif [ $arch = i686 -a -z "$nomodeset" ] && need_modesetting; then
+            #. Forcing <driver-name> driver on <cpu-type>
             echo_live "$_Forcing_X_driver_on_Y_" $(pquote modesetting) $(pquote skylake)
             args=modesetting${args:+,}$args
         fi
     fi
 
     [ "$args" ] || return
-
+    #. Configuring <xorg.conf> file with <arguments to xorg= cheat>
     echo_live "$_Configuring_X_file_with_Y_" $(pquote $xorg_conf) $(pquote $args)
     backup_file $xorg_conf
     /sbin/make-xorg-conf --output=$xorg_conf $args
@@ -480,7 +489,8 @@ need_modesetting() {
     # Get all skylake pci ids
     # See recent pci.ids from http://pci-ids.ucw.cz/
     # 8086:19* ==> Intel Skylake
-    local skylake=$(lspci -n | cut -d" " -f3 | grep "^8086:19[0-5]") || return 1
+    local skylake=$(lspci -n | cut -d" " -f3 | grep "^8086:19[0-5]")
+    [ -z "$skylake" ] && return 1
 
     # Make sure no HD Graphics 510
     echo "$skylake" | grep -q "^8086:190[26]" && return 1
@@ -560,6 +570,7 @@ detect_any_video_driver() {
 
     FOUND_KMS_DRIVER="$(echo "$video_modules" | egrep "^($KMS_VIDEO_MODULES)$")"
     if [ "$FOUND_KMS_DRIVER" ]; then
+        #. Found <KMS> video module(s) <module-name(s)>
         echo_live "$_Found_X_video_module_s_Y_" KMS "$(pquote $(echo $FOUND_KMS_DRIVER))"
         FOUND_i915=$(echo $FOUND_KMS_DRIVER | grep "^i915$")
     else
@@ -584,7 +595,8 @@ detect_sisimedia_driver() {
     #. Found <type> kernel modules ...
     echo_live "$_Found_X_kernel_modules_" sis
     test -e $XORG_DRIVER_DIR/${xorg_driver}_drv.so || return
-    echo_live "$_Found_X_xorg_driver_" $xorg_driver
+    #. Found <driver-name> video driver
+    echo_live "$_Found_X_video_driver_" $xorg_driver
 
     # Add "default" only if there is no previous XORG_ARGS
     # Always add the "sisimedia" driver
@@ -612,10 +624,12 @@ font_size_to_dpi() {
     local size=$1
     local bad=$(echo $size | sed -r 's/^([0-9]+(\.[0-9]*)?|\.[0-9]+)//')
     if [ ${#bad} -gt 0 ]; then
+        #. Invalid <option-name> boot parameter <bad-parameter>
         error "$_Invalid_X_boot_parameter_Y_" "$(pquote fontsize)" $(pquote $size)
         return 1
     fi
-    DPI_OUT=$(awk "BEGIN{ printf \"%.0f\n\", $size * 96; }")
+    local begin=BEGIN
+    DPI_OUT=$(awk "$begin{ printf \"%.0f\n\", $size * 96; }")
 }
 
 check_dpi() {
