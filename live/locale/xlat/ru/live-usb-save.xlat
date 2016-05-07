@@ -6,7 +6,4 @@ _Restore_state_information_="Восстановить информацию о с
 _Save_X_desktop_Y_="Сохранить %s рабочий стол %s"
 _Save_state_information_="Сохранить информацию о состоянии"
 _Will_not_save_state_information_="Не сохранять информацию о состоянии"
-_delete_state_file_X_="Удалить файл состояния %s"
 _restore_X_desktop_to_Y_="Восстановить %s рабочий стол на %s"
-_restore_state_file_X_="Восстановить файл состояния %s"
-_save_state_file_X_="Сохранить файл состояния %s"

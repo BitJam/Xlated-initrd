@@ -15,10 +15,13 @@ MSTATE_FILES="# File: machine-state-files
 # Machine specific files to be saved across reboots
 
 /etc/adjtime
+/etc/modprobe.d/hang-on-shutdown.conf
+/etc/modprobe.d/i915-power-saving.conf
+/etc/modprobe.d/iwlwifi-no-blink.conf
 /etc/udev/rules.d/*-persistent-net.rules
 # /etc/X11/xorg.conf
-/var/lib/alsa/asound.state
-"
+/var/lib/alsa/asound.state"
+
 GSTATE_FILES="# File: general-state-files
 # Files to be saved across reboots and across machines
 
@@ -39,8 +42,7 @@ GSTATE_FILES="# File: general-state-files
 # /etc/passwd
 # /etc/shadow
 # /etc/group
-# /etc/gshadow
-"
+# /etc/gshadow"
 
 MSTATE_DIR=state/machine
 GSTATE_DIR=state/general
@@ -85,6 +87,8 @@ do_start() {
 
     read_create_config_files $root_dir || exit 0
 
+    #. "State" information are files saved at shutdown and restored at startup
+    #. Like saving the state of a game.
     echo_script "$_Restore_state_information_" $0
 
     # Always restore machine specific state files
@@ -194,6 +198,7 @@ restore_desktop() {
         [ -d "$dest_dir" ] || continue
         [ -e "$sorc"     ] || continue
         should_copy $sorc $dest || continue
+        #. Restore <user-name> desktop to <window-manager-name>
         echo_live "$_restore_X_desktop_to_Y_" $(pquote $user) $(pquote $(cat $sorc))
         echo_cmd cp "$sorc" "$dest"
         echo_cmd chown $user:users $dest
@@ -201,9 +206,13 @@ restore_desktop() {
 }
 
 save_state() {
-    local state_dir="$1"  files="$2"  dir2="$3"
+    #. "general" (same on all machines) versus "machine specific"
+    local state_dir="$1"  files="$2"  dir2="$3"  type="$(printf "general")"
+
     test -e $state_dir/no-state && return
 
+    #. "machine specific" versus "general" (same on all machines)
+    [ ${#dir2} -gt 0 ] && type=$(printf "machine specific")
     # dir2 is typically/only a machine-id
     state_dir=$state_dir${dir2:+/$dir2}
     local perm_file=$state_dir/permissions
@@ -241,11 +250,12 @@ save_state() {
         local from=$file
         local to=$state_dir/files$file
         should_copy $from $to || continue
-        echo_live "$_save_state_file_X_" $(wq $file)
+        #. Save <general|machine specific> state file <file-name>
+        echo_live "$_Save_X_state_file_Y_" "$(wq $type)" $(wq $file)
         echo_cmd mkdir -p $(dirname $to)
         echo_cmd cp $from $to
 
-        [ "$FS_TYPE" != "vfat" ] && continue
+        [ "$FS_TYPE" != vfat ] && continue
 
         # Save permission information on vfat LiveUSBs
         test -e $perm_file || touch $perm_file
@@ -262,10 +272,11 @@ save_state() {
 }
 
 restore_state() {
-    local state_dir="$1"  files="$2"  dir2="$3"
+    local state_dir="$1"  files="$2"  dir2="$3" type="$(printf "general")"
     test -e $state_dir/no-state && return
 
     # dir2 is typically/only a machine-id
+    [ ${#dir2} -gt 0 ] && type=$(printf "machine specfic")
     state_dir=$state_dir${dir2:+/$dir2}
     local perm_file=$state_dir/permissions
 
@@ -278,7 +289,8 @@ restore_state() {
             [ -z "${to##/live/*}" ] && continue
 
             should_copy $from $to || continue
-            echo_live "$_restore_state_file_X_" $(wq $to)
+            #. Restore <general|machine specific> state file <file-name>
+            echo_live "$_Restore_X_state_file_Y_" "$(wq $type)" "$(wq $to)"
             echo_cmd mkdir -p $(dirname $to)
 
             echo_cmd cp $from $to
@@ -298,7 +310,8 @@ restore_state() {
                 echo_live "$_Reset_file_X_" $(pquote $file)
                 reset_adjtime $file
             else
-                echo_live "$_delete_state_file_X_" $(pquote $file)
+                #. Delete <general|machine specific> state file <file-name>
+                echo_live "$_Delete_X_state_file_Y_" "$(wq $type)" $(pquote $file)
                 echo_cmd rm -f $file
             fi
         done
@@ -366,7 +379,7 @@ should_copy() {
 }
 
 mach_id() {
-    local data=$(find $ID_DIR/ -name "board_*" -exec cat '{}' + 2>/dev/null)
+    local data=$(find $ID_DIR/ -name 'board_*' -exec cat '{}' + 2>/dev/null)
     if [ ${#data} -eq 0 ]; then
         echo "0000000000000000000000"
         return 1
