@@ -46,19 +46,19 @@ do_start() {
 
     [ -e $root_dir/state/nostore -a -z "$DISABLE" ] && return
 
-    echo_script "Configure LiveUSB Storage" $0
+    echo_script "$_Configure_LiveUSB_Storage_" $0
 
     DEF_USER=$(find_def_user)
 
     eval "USER_HOME=~$DEF_USER"
 
     if [ -z "$DEF_USER" -o -z "${USER_HOME##~*}" ]; then
-        echo_live "No default user %s found on the system." "$(pquote $DEF_USER)"
+        echo_live "$_No_default_user_X_found_on_the_system_" "$(pquote $DEF_USER)"
         USER_HOME=
     fi
 
     if [ "$DISABLE" ]; then
-        echo_live "Disabling LiveUSB storage"
+        echo_live "$_Disabling_LiveUSB_storage_"
         rmdir /root/$STORAGE_BIND $USER_HOME/$STORAGE_BIND 2>/dev/null
         return
     fi
@@ -72,7 +72,7 @@ do_stop() {
 
     test -e /live/config/remasterable || exit 0
 
-    echo_script "Disable LiveUSB Storage" $0
+    echo_script "$_Disable_LiveUSB_Storage_" $0
 
     read_cmdline
 
@@ -81,7 +81,7 @@ do_stop() {
     eval "USER_HOME=~$DEF_USER"
 
     if [ -z "$DEF_USER" -o -z "${USER_HOME##~*}" ]; then
-        echo_live "No default user %s found on the system." "$(pquote $DEF_USER)"
+        echo_live "$_No_default_user_X_found_on_the_system_" "$(pquote $DEF_USER)"
         USER_HOME=
     fi
 
@@ -98,7 +98,7 @@ create_storage() {
     local user=$1  home=$2  store_dir=$3/$1  from_dir=$2/$STORAGE_BIND
 
     if ! test -d "$home"; then
-        echo_live "Home directory for user %s not found" "$(pquote $user)"
+        echo_live "$_Home_directory_for_user_X_not_found_" "$(pquote $user)"
         return
     fi
 
@@ -106,17 +106,17 @@ create_storage() {
     local gid=$(getent passwd $user | cut -d: -f4)
 
     if [ ${#uid} -le 0 -o ${#gid} -le 0 ]; then
-        echo_live "Could not find UID or GUID for user %s" "$(pquote $user)"
+        echo_live "$_Could_not_find_UID_or_GUID_for_user_X_" "$(pquote $user)"
         return
     fi
 
     if ! echo $uid$gid | egrep -q "^[0-9]+$"; then
-        echo_live "Found non-numeric UID or GUID for user %s: %s" "$(pquote $user)"  $uid:$gid
+        echo_live "$_Found_non_numeric_UID_or_GUID_for_user_X_Y_" "$(pquote $user)"  $uid:$gid
         return
     fi
 
     if [ "$BOOT_FSTYPE" = vfat -a $uid -ne 0 -a $uid -ne $USER_UID ]; then
-        echo_live "Can only use %s storage with UID of %s" "$(pquote vfat LiveUSB)" "$(pquote $USER_UID)"
+        echo_live "$_Can_only_use_X_storage_with_UID_of_Y_" "$(pquote vfat LiveUSB)" "$(pquote $USER_UID)"
         return
     fi
 
@@ -125,7 +125,7 @@ create_storage() {
     test -e $from_dir || mkdir -p $from_dir
 
     if ! test -d $from_dir; then
-        echo_live "The file % is not a directory" "$(pquote $from_dir)"
+        echo_live "$_The_file_is_not_a_directory_" "$(pquote $from_dir)"
         return
     fi
 
@@ -135,10 +135,10 @@ create_storage() {
     [ "$BOOT_FSTYPE" != vfat ] && chown $uid:$gid $store_dir
 
     if mountpoint -q $from_dir; then
-        echo_live "Directory %s is already a mountpoint" "$(pquote $from_dir)"
+        echo_live "$_Directory_X_is_already_a_mountpoint_" "$(pquote $from_dir)"
         return
     fi
-    echo_live "Enable LiveUSB storage at %s" "$(pquote $from_dir)"
+    echo_live "$_Enable_LiveUSB_storage_at_X_" "$(pquote $from_dir)"
     mount --bind $store_dir $from_dir
 }
 
