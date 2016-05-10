@@ -72,6 +72,7 @@ automount=off|amnt=off)                          AUTOMOUNT_OFF=true ;;
               splash=*)  SPLASH_PARAM=$value                        ;;
            desktheme=*)    DESK_THEME=$value                        ;;
                 norepo)       NO_REPO=true                          ;;
+              norepo=*)   IGNORE_REPO=$value                        ;;
            deskdelay=*) DESKTOP_DELAY=$value                        ;;
              nomodeset)     NOMODESET=true                          ;;
             fontsize=*)     FONT_SIZE=$value                        ;;
@@ -354,26 +355,31 @@ localize_repo() {
         */UTC|UTC) tz=$lang_tz ;;
     esac
 
-    local arg=$mirror         # cheat mirror=xx overides all else
-    : ${arg:=$tz}             # next come tz=xxx/yyy cheat (or via tz menu)
-    : ${arg:=$lang_tz}        # The lang based timezone
-    : ${arg:=$lang_mirror}    # The lang based mirror should never be needed
+    local args=$mirror         # cheat mirror=xx overides all else
+    : ${args:=$tz}             # next come tz=xxx/yyy cheat (or via tz menu)
+    : ${args:=$lang_tz}        # The lang based timezone
+    : ${args:=$lang_mirror}    # The lang based mirror should never be needed
 
-    [ "$arg" ] || return
-
-    case $arg in
+    case $args in
         */UTC|UTC) return ;;
     esac
 
-    sources_dir=/etc/apt/sources.list.d
-    first_write $sources_dir || [ "$mirror" -o "$tz" ] || return
+    if [ ${#IGNORE_REPO} -gt 0 ] && localize-repo --help | grep -q -- --ignore; then
+        : ${args:=default}
+        args="--ignore=$IGNORE_REPO --random $args"
+    fi
 
-    local verbose
-    [ "$DB_PLUS" ] && verbose=--verbose
+    [ "$args" ] || return
+
+    sources_dir=/etc/apt/sources.list.d
+    first_write $sources_dir || [ "$mirror" -o "$tz" -o "${IGNORE_REPO}" ] || return
+
+    [ "$DB_PLUS" ] && args="--verbose${args:+ }$args"
 
     #. Localizing source repos using <timezone|country-code>
-    echo_live "$_Localizing_source_repos_using_X_" $(pquote $arg)
-    localize-repo $verbose $arg
+    echo_live "$_Localizing_source_repos_using_X_" "$(wq $args)"
+
+    localize-repo $args
 }
 
 set_utc_local() {
@@ -611,6 +617,8 @@ scale_conky() {
     local file=/$home/.conkyrc  def_width=180  def_gheight=30
     [ "$dpi" ] || return
     test -w $file || return
+    head $file | grep -iq "^#[[:space:]]*Standard[[:space:]]*antiX[[:space:]].conkyrc" || return
+
     local width=$((dpi * $def_width / 96 ))
     [ $width -gt $def_width ] || return
     echo_live "$_Setting_Conky_width_to_X_" $(pquote $width)
@@ -688,7 +696,6 @@ set_user_desktop_delay() {
     echo_live "$_Setting_desktop_delay_to_X_" $(pquote $delay)
     su -c "sed -r -i 's/^\s*(STARTUP_DELAY=).*/\1$delay/' $ds_conf" $user
 }
-
 
 
 #-------------------------------------------------------------------------------
