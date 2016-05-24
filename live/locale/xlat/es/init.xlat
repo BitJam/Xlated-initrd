@@ -58,6 +58,7 @@ _No_X_checksums_were_found_in_Y_Cant_do_any_Z_checks_="No se hallaron checksums 
 _No_X_devices_found_="No se hallaron dispositivos %s"
 _No_X_file_found_Rename_Y_to_Z_="No se encontró el archivo %s.  Cambie el nombre de %s a %s"
 _No_X_found_but_there_is_a_Y_="No se encontró %s pero hay %s"
+_No_X_found_in_Y_="No se encontró %s en %s"
 _No_X_found_in_file_Y_="No se encontró %s en el archivo %s"
 _Non_Fatal_Error_="Error no grave"
 _Only_one_option_can_be_selected_="Puede seleccionar solo una opción"
