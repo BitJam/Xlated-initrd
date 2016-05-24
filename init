@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.54.16"
-           VERSION_DATE="Tue May 10 13:56:06 MDT 2016"
+                VERSION="7.54.18"
+           VERSION_DATE="Tue May 24 02:09:25 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -62,7 +62,7 @@
            MOD_DIR="/lib/modules/$(uname -r)"
 
          FROM_TYPE="usb,cd"
-     FROM_TYPE_ALL="usb,cd,mmc,hd"
+     FROM_TYPE_ALL="usb,cd,hd"
 
       FRUGAL_FILES="linuxfs linuxfs.md5 vmlinuz vmlinuz.md5 initrd.gz initrd.gz.md5 xtra xtra.tgz ../boot"
 
@@ -327,13 +327,15 @@ main_core() {
 
     coldplug_modules
 
-    local orig_fb_name=$(cat /sys/class/graphics/fb0/name 2> /dev/null)
+    # local orig_fb_name
+    # read orig_fb_name 2>/dev/null </sys/class/graphics/fb0/name
     load_kernel_modules "$MODULE_LIST"
-    set_fbcondecor "$SPLASH_PARAM" "$orig_fb_name"
+    # set_fbcondecor "$SPLASH_PARAM" "$orig_fb_name"
 
     initialize_cmdline2
 
-    PROC_CMDLINE=$(cat /proc/cmdline)
+    read PROC_CMDLINE 2>/dev/null </proc/cmdline
+
     [ "$DO_MENUS" ]; do_early_menus
 
     read_late_cmdline_params "$PROC_CMDLINE $(cat /live/config/cmdline)"
@@ -458,8 +460,9 @@ main_core() {
         [ "$NEED_HOMEFS" ] && non_fatal  "Could not enable required %s persistence" "$(pqh home!)"
     fi
 
-    [ "$DB_PLUS" ] && local plus_t1=$(get_time)
+    [ "$DB_PLUS"       ] && local plus_t1=$(get_time)
     [ "$DO_XTRA"       ] && copy_xtra    $DEFAULT_DIR
+    [ "$DO_XTRA"       ] && delete_files $DEFAULT_DIR
     [ "$DO_AUTO_LOGIN" ] && auto_login   "$AUTO_LOGIN_PROG" "$AUTO_LOGIN_TERMS" "$NEW_ROOT"
     [ "$DO_FANCY"      ] && fancy_prompt "$FANCY_PROMPT" "$NEW_ROOT"
     if [ "$DB_PLUS" ]; then
@@ -1202,7 +1205,8 @@ set_fbcondecor() {
     local prog=/bin/fbcondecor_ctl.static
     test -x $prog || return
     #vmsg 5 "found $prog"
-    local new_name=$(cat /sys/class/graphics/fb0/name 2>/dev/null)
+    local new_name
+    read new_name 2>/dev/null </sys/class/graphics/fb0/name
     [ "$orig_name" = "$new_name" ] && return
 
     vmsg 6 "Found new fb driver:$white $new_name"
@@ -1297,14 +1301,34 @@ coldplug_modules() {
 #------------------------------------------------------------------------------
 
 is_usb_or_removable() {
-    local short_dev=${1##*/}
-    local drive=$(echo $short_dev | sed -r 's/[0-9]+$//')
-    local dir=/sys/block/$drive
-    [ "$(cat $dir/removable 2>/dev/null)" = 1 ] && return 0
+    local drive=$(get_drive $1)
+    local dir=/sys/block/$drive flag
+    read flag 2>/dev/null < $dir/removable
+    [ "$flag" = 1 ] && return 0
     local devpath=$(readlink -f $dir/device)
     [ "$devpath" ] || return 1
     echo $devpath | grep -q /usb
     return $?
+}
+
+is_removable() {
+    local drive=$(get_drive $1)
+    local dir=/sys/block/$drive flag
+    read flag 2>/dev/null < $dir/removable
+    [ "$flag" = 1 ]
+    return $?
+}
+
+
+#------------------------------------------------------------------------------
+# Function: get_drive <partition>
+#------------------------------------------------------------------------------
+get_drive() {
+    local drive part=${1##*/}
+    case $part in
+        mmcblk*) echo ${part%p[0-9]}                        ;;
+              *) drive=${part%[0-9]}  ; echo ${drive%[0-9]} ;;
+    esac
 }
 
 #------------------------------------------------------------------------------
@@ -1340,7 +1364,13 @@ from_filter() {
         case $(stat -c %t $dev) in
 
             b) cd_devs="$cd_devs $dev" ;;
-           b3) mmc_devs="$mmc_devs $dev" ;;
+           b3) mmc_devs="$mmc_devs $dev"
+               if is_removable $dev; then
+                    usb_devs="$usb_devs $dev"
+                else
+                    hd_devs="$hd_devs $dev"
+                fi ;;
+
        3|8|22) if is_usb_or_removable $dev; then
                     usb_devs="$usb_devs $dev"
                 else
@@ -1436,20 +1466,18 @@ _find_files() {
         short_files=$files
     fi
 
-    local last_list disk_device partition partition_error
+    local last_list  # disk_device partition partition_error
 
     # Find disk device if we are looking for a named partition.
     # This lets us bail early if the disk is found but the partition is not.
-    if [ -n "$device_id" -a -z "${device_id##name=*}" ]; then
-        partition=${device_id##name=}
-        partition=${partition##*/}
-        case $partition in
-            mmcblk*) disk_device=${partition%p[0-9]}                                    ;;
-                  *) disk_device=${partition%[0-9]}  ; disk_device=${disk_device%[0-9]} ;;
-        esac
-        disk_device=/dev/$disk_device
-        partition=/dev/$partition
-    fi
+
+    # The disk device can appear before the partition appears so this is not reliable
+    # if [ -n "$device_id" -a -z "${device_id##name=*}" ]; then
+    #     partition=${device_id##name=}
+    #     partition=${partition##*/}
+    #     disk_device=/dev/$(get_drive $partition)
+    #     partition=/dev/$partition
+    # fi
 
     unset FOUND_DEV FOUND_MP
 
@@ -1562,13 +1590,13 @@ _find_files() {
 
             # Give up early if the root device is found but the partition is not
             # But wait a second in case there is a delay for the partitions to show
-            if [ "$partition_error" ]; then
-                warn  "Found root device %s but not partition %s" "$(pqw $disk_device)" "$(pqw $partition)"
-                sleep 1
-                final_try=true
-            fi
+            # if [ "$partition_error" ]; then
+            #     warn "Found root device %s but not partition %s" "$(pqw $disk_device)" "$(pqw $partition)"
+            #     sleep 1
+            #     final_try=true
+            # fi
 
-            [ "$disk_device" -a -e "$disk_device" -a ! -e $partition ] && partition_error=true
+            # [ "$disk_device" -a -e "$disk_device" -a ! -e $partition ] && partition_error=true
 
             find_device "$find_type" "$try" "$final_try" "$device_id" || return $?
             if [ -z "$DEVICE_LIST" ]; then
@@ -1656,9 +1684,9 @@ _find_files() {
                         boot) BOOT_FSTYPE=$fstype ;;
                     esac
 
-                    local short_dev=${dev##*/}
-                    local drive=$(echo $short_dev | sed -r 's/[0-9]+$//')
-                    local model=$(cat /sys/block/$drive/device/model 2>/dev/null)
+                    local drive=$(get_drive $dev)
+                    local model
+                    read model 2>/dev/null </sys/block/$drive/device/model
 
                     # <type> device model: <model-name>
                     [ "$model" ] && vmsg 6 '%s device model: %s' $find_type "$(cq $model)"
@@ -3028,7 +3056,6 @@ select_device() {
     while read -r name line ; do
 
         [ ${#name} -eq 0 -o ${#name} -gt 10 ] && continue
-        #case $name in sd?[0-9]*) ;; *) continue ;; esac
 
         local type=$(echo "$line" | sed -n -r 's/.* TYPE="([^"]*)"$/\1/p' | tail -n 1)
         #uuid=$(echo "$line" | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/[^:]*: LABEL="//p')
@@ -3036,12 +3063,7 @@ select_device() {
             ""|udf|iso9660|swap|squashfs) continue
         esac
 
-        local disk_name  dev=/dev/$name
-        case $(stat -c %t $dev) in
-            [38]|22)  disk_name=${name%[0-9]};  disk_name=${disk_name%[0-9]} ;;
-             179|b3)  disk_name=${name%p[0-9]}                               ;;
-                  *)  continue                                               ;;
-        esac
+        local disk_name=$(get_drive $name)
 
         local sys_dir=/sys/block/$disk_name
         local model=$(head -c 16  $sys_dir/device/model 2>/dev/null)
@@ -4437,6 +4459,10 @@ copy_xtra() {
         cp -a $xtra_dir/$dir $NEW_ROOT/
     done
     msg
+}
+
+delete_files() {
+    local bdir=$1
     local dfile=$bdir/delete.list
     test -e $dfile || return
     msg 'Deleting files listed in %s' $(pq $dfile)
