@@ -49,9 +49,10 @@ GSTATE_DIR=state/general
 USTATE_DIR=state/user
 
 ID_DIR="/sys/class/dmi/id"
-ID_FILES="board_vendor board_name board_version"
+ID_FILES="board_vendor board_name board_version product_name"
 
 DS_FILE="/home/%s/.desktop-session/default-desktop"
+DS_DIR="/home/%s/.desktop-session"
 
 export PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin
 
@@ -104,10 +105,11 @@ do_start() {
 
     [ "$PERSISTENCE" ] && return
 
+    local del_file=$root_dir/state/to-delete
     restore_desktop $root_dir/$USTATE_DIR
 
-    #delete_files $root_dir/to-delete
-    #rm -f $root_dir/to-delete
+    delete_files $del_file
+    rm -f $del_file
 }
 
 do_stop() {
@@ -133,7 +135,8 @@ do_stop() {
     save_desktop $root_dir/$USTATE_DIR
     save_state   $root_dir/$MSTATE_DIR "$(state_files "$MSTATE_FILES")" $(mach_id)
     save_state   $root_dir/$GSTATE_DIR "$(state_files "$GSTATE_FILES")"
-    #[ ${#TO_DELETE} -gt 0 ] && echo -e "$TO_DELETE" > $root_dir/to-delete
+    local del_file=$root_dir/state/to-delete
+    [ ${#TO_DELETE} -gt 0 ] && echo -e "$TO_DELETE" > $del_file
 }
 
 read_create_config_files() {
@@ -175,15 +178,19 @@ save_desktop() {
 
     test -e $to_dir/no-state && return
 
-    local user from to
+    local user from to base_file
+
     for user in $(ls /home); do
-        from=$(printf $DS_FILE $user)
-        [ -e "$from" ] || continue
-        to="$to_dir/$user/default-desktop"
-        should_copy "$from" "$to" || continue
-        echo_live "$_Save_X_desktop_Y_" $(wq $user) $(wq $(cat $from))
-        echo_cmd mkdir -p $(dirname "$to")
-        echo_cmd cp "$from" "$to"
+        for base_file in default-desktop automount.conf; do
+            from=$(printf $DS_DIR $user)/$base_file
+            [ -e "$from" ] || continue
+            to="$to_dir/$user/$base_file"
+            should_copy "$from" "$to" || continue
+            #. Save <user-name> file <file-name>
+            echo_live "$_Save_X_file_Y_" $(wq $user) $(wq $(basename $from))
+            echo_cmd mkdir -p $(dirname "$to")
+            echo_cmd cp "$from" "$to"
+        done
     done
 }
 
@@ -195,19 +202,28 @@ restore_desktop() {
 
     test -e $from_dir/no-state && return
 
-    local user dest_dir dest sorc
+    local user dest_dir dest sorc base_file
     for user in $(ls $from_dir 2>/dev/null); do
-        sorc=$from_dir/$user/default-desktop
-        dest=$(printf $DS_FILE $user)
-        dest_dir=$(dirname $dest)
-        [ -d "$dest_dir" ] || continue
-        [ -e "$sorc"     ] || continue
-        should_copy $sorc $dest || continue
-        #. Restore <user-name> desktop to <window-manager-name>
-        echo_live "$_restore_X_desktop_to_Y_" $(wq $user) $(wq $(cat $sorc))
-        echo_cmd cp "$sorc" "$dest"
-        echo_cmd chown $user:users $dest
+        for base_file in default-desktop automount.conf; do
+            sorc=$from_dir/$user/default-desktop
+            dest=$(printf $DS_FILE $user)
+            dest_dir=$(dirname $dest)
+            [ -d "$dest_dir" ] || continue
+            [ -e "$sorc"     ] || continue
+            should_copy $sorc $dest || continue
+            #. Restore <user-name> file <file-name>
+            echo_live "$_Restore_X_file_Y_" $(wq $user) $(wq $(basename $sorc))
+            echo_cmd cp "$sorc" "$dest"
+            echo_cmd chown $user:users $dest
+        done
     done
+}
+
+dummy() {
+    #. "Save %s desktop %s" $(wq $user) $(wq $(cat $from))
+    echo_live "$_Save_X_desktop_Y_" $(wq $user) $(wq $(cat $from))
+    #. Restore <user-name> desktop to <window-manager-name>
+    echo_live "$_restore_X_desktop_to_Y_" $(wq $user) $(wq $(cat $sorc))
 }
 
 save_state() {
@@ -255,9 +271,11 @@ save_state() {
         local from=$file
         local to=$state_dir/files$file
 
-        if [ ${#dir2} -gt 0 -a ! -e "$from" ]; then
-            TO_DELETE="$TO_DELETE\n$from"
+        if [ ! -e "$from" ]; then
             rm -f $to
+            # Don't add unmatched globs to the delete list
+            [ -z "${from##*\**}" ] && continue
+            TO_DELETE="$TO_DELETE\n$from"
             continue
         fi
 
@@ -314,7 +332,6 @@ restore_state() {
             [ "$perm" != "$(stat -c %a $to)" ] && echo_cmd chmod $perm $to
         done
     else
-        # Delete machine-specific state files on a "new" machine
         [ "$dir2" ] || return
         for file in $MSTATE_FILES; do
             test -f $file || continue
@@ -333,12 +350,12 @@ restore_state() {
 }
 
 delete_files() {
-    local file  list_file=$1  type=$(wq "$_machine_specific_")
+    local file  list_file=$1
     test -r $list_file || return
     while read file; do
         test -e "$file" || continue
         #. Delete <general|machine specific> state file <file-name>
-        echo_live "$_Delete_X_state_file_Y_" "$type" "$(wq $file)"
+        echo_live "$_Delete_X_state_file_Y_" "" "$(wq $file)"
         echo_cmd rm -f "$file"
     done<<Delete_Files
 $(cat $list_file)
