@@ -33,6 +33,7 @@ UXA_PCI_ID="0042|0046|1132|1240|2562|2572|2582|258a|2592|2772|2776|2782
 2e12|2e13|2e22|2e23|2e32|2e33|2e42|2e43|2e92|2e93|3577|3582
 358e|7121|7123|7125|7800|a001|a002|a011|a012"
 
+AUTOMOUNT_CMD=/usr/local/bin/automount-antix
 
 #-jbb For debugging
 : ${CMDLINE:=$(cat /live/config/proc-cmdline /live/config/cmdline /live/config/cmdline2)}
@@ -66,6 +67,7 @@ for param in $CMDLINE; do
 automount=off|amnt=off)                          AUTOMOUNT_OFF=true ;;
         automount|amnt)                              AUTOMOUNT=true ;;
     automount=*|amnt=*)     CMD_MOUNT=$value ;       AUTOMOUNT=true ;;
+             mount=off)     CMD_MOUNT=$value ;   AUTOMOUNT_OFF=true ;;
                mount=*)     CMD_MOUNT=$value ;       AUTOMOUNT=true ;;
                fstab=*)     CMD_FSTAB=$value                        ;;
                 splash)  SPLASH_PARAM=v                             ;;
@@ -108,7 +110,7 @@ do_start() {
         for vfile in $VERSION_FILES; do
             test -r $vfile || continue
             DISTRO=$(sed 's/[-_ ].*//' $vfile | head -n1)
-            [ ${#DISTRO} - gt 0 ] && break
+            [ ${#DISTRO} -gt 0 ] && break
         done
     fi
 
@@ -117,7 +119,11 @@ do_start() {
         DISTRO=${DISTRO%\"}
     fi
 
-    create_fstab $DISTRO
+    which X &>/dev/null && HAVE_X=true
+
+    local alt_automount
+    [ -n "$HAVE_X" -a -e $AUTOMOUNT_CMD ] && alt_automount=true
+    create_fstab "$DISTRO" $alt_automount
 
     #-jbb: for debugging
     unset COUNTRY WM_LANG KEYBOARDS KEYTABLE LANG MIRROR TZ XKBLAYOUT CONSOLE_FONT
@@ -125,7 +131,6 @@ do_start() {
     get_init_lang "$CMD_LANG" error
     [ "$NO_REPO" ] || localize_repo "$CMD_MIRROR" "$CMD_TZ" "$MIRROR" "$TZ"
     localize_skel $WM_LANG
-
 
     local dpi DPI_OUT
 
@@ -135,8 +140,7 @@ do_start() {
     set_utc_local $CMD_CLOCK
 
     # Only do X stuff on systems that seem to have X
-    if which X &>/dev/null; then
-        HAVE_X=true
+    if  [ "$HAVE_X" ]; then
 
         if [ "$EARLY_VID" ]; then
             load_video_driver
@@ -185,6 +189,8 @@ do_start() {
     set_desktop_theme      "$DESK_THEME"       $DEF_USER $USER_HOME
     set_user_dpi           "${CMD_UDPI:-$dpi}" $DEF_USER $USER_HOME
     set_user_desktop_delay "$DESKTOP_DELAY"    $DEF_USER $USER_HOME
+    [ "$alt_automount" ] && set_user_automount $DEF_USER $USER_HOME "$AUTOMOUNT" "$AUTOMOUNT_OFF"
+
     #localize_firefox $LANG
 }
 
@@ -193,10 +199,10 @@ do_start() {
 # FSTAB stuff
 #-------------------------------------------------------------------------------
 create_fstab() {
-    local distro=$1
+    local distro=$1 alt_automount=$2
 
     case $distro in
-        antiX) automount_and_fstab;;
+        antiX) automount_and_fstab $alt_automount ;;
       MX|MX-*) add_fstab_swap     ;;
             *) error 'Unknown distro %s' "$(pquote $distro)"
     esac
@@ -209,10 +215,15 @@ add_fstab_swap() {
 
 automount_and_fstab() {
 
-   local        am_file=/etc/fstab.automount
-   local     mount_file=/etc/fstab.mount
-   local        hp_file=/etc/fstab.hotplug
-   local  hp_state_file=$hp_file.state
+    local alt_automount=$1
+
+    # Tell rc.local to copy 90-fstab-automount.rules to main file system
+    [ -z "$alt_automount" ] && touch /live/config/fstab-hotplug
+
+    local        am_file=/etc/fstab.automount
+    local     mount_file=/etc/fstab.mount
+    local        hp_file=/etc/fstab.hotplug
+    local  hp_state_file=$hp_file.state
 
     # Delay start of auto-stuff until after udev has started
     local fstab_rule=/etc/udev/rules.d/90-fstab-automount.rules
@@ -223,21 +234,23 @@ automount_and_fstab() {
     fi
 
     # "off" means "off"
-    if [ "$CMD_MOUNT" = 'off' -o -n "$AUTOMOUNT_OFF" ]; then
+    if [ "$CMD_MOUNT" = 'off' ]; then
         echo_live "$_Turning_all_boot_mount_options_off_"
+        echo_live "$_Turning_automount_off_"
         rm -f $mount_file
+        rm -f $am_file
         CMD_MOUNT=
+        AUTOMOUNT=
 
-        if [ -n "$AUTOMOUNT_OFF" ]; then
-            echo_live "$_Turning_automount_off_"
-            AUTOMOUNT=
-            rm -f $am_file
-        fi
+    elif [ -n "$AUTOMOUNT_OFF" ]; then
+        echo_live "$_Turning_automount_off_"
+        AUTOMOUNT=
+        rm -f $am_file
     fi
 
     # Read in previous value (persistent systems only)
     if [ -z "$CMD_MOUNT" -a -e $mount_file ]; then
-        CMD_MOUNT=$(cat $mount_file)
+        read CMD_MOUNT 2>/dev/null <$mount_file
     else
         [ "$CMD_MOUNT" ] && echo $CMD_MOUNT > $mount_file
     fi
@@ -263,6 +276,11 @@ automount_and_fstab() {
     fi
 
     make-fstab --quiet $fstab_opt
+
+    if [ "$alt_automount" ]; then
+        rm -f $am_file $hp_file $hp_state_file
+        return
+    fi
 
     [ "$AUTOMOUNT" ] && touch $am_file
 
@@ -625,7 +643,11 @@ scale_conky() {
     head $file | grep -iq "^#[[:space:]]*Standard[[:space:]]*antiX[[:space:]].conkyrc" || return
 
     local width=$((dpi * $def_width / 96 ))
-    [ $width -gt $def_width ] || return
+    # Don't make conky smaller than the default size
+    if [ $width -lt $def_width ]; then
+        dpi=96
+        width=$def_width
+    fi
     echo_live "$_Setting_Conky_width_to_X_" $(pquote $width)
     local gwidth=$((width - 10))
     local gheight=$((2 * dpi * $def_gheight / 96 - $def_gheight))
@@ -702,6 +724,18 @@ set_user_desktop_delay() {
     su -c "sed -r -i 's/^\s*(STARTUP_DELAY=).*/\1$delay/' $ds_conf" $user
 }
 
+set_user_automount() {
+    local  user=$1  home=$2  on=$3  off=$4
+    local file=$home/.desktop-session/automount.conf
+    if [ "$on" ]; then
+        echo_live "$_Automount_enabled_"
+        add_or_edit "^automount=" "automount=TRUE" $file $user create
+
+    elif [ "$off" ]; then
+        echo_live "$_Automount_disabled_"
+        add_or_edit "^automount=" "automount=FALSE" $file $user create
+    fi
+}
 
 #-------------------------------------------------------------------------------
 # DEFAULT USER stuff
