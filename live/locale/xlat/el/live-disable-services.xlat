@@ -3,7 +3,6 @@ _Detected_laptop_mobile_device_="Εντοπίστηκε το laptop/κινητή
 _Disabling_NFS_server_X_="Απενεργοποίηση NFS server %s"
 _Disabling_X_services_="Απενεργοποίηση των υπηρεσιών %s"
 _Disabling_X_services_Y_="Απενεργοποίηση %s υπηρεσιών %s"
-_Disabling_gpm_g_="Απενεργοποίηση gpm"
 _Disabling_more_services_X_="Απενεργοποίηση περισσότερες υπηρεσίες %s"
 _Disabling_network_services_X_="Απενεργοποίηση δικτύου %s"
 _Disabling_some_services_X_="Απενεργοποίηση μερικών υπηρεσιών %s"
