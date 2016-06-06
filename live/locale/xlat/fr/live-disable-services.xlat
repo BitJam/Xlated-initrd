@@ -3,7 +3,6 @@ _Detected_laptop_mobile_device_="Détection d'un ordinateur portable / appareil 
 _Disabling_NFS_server_X_="Désactivation du service NFS %s"
 _Disabling_X_services_="Désactivation des services %s"
 _Disabling_X_services_Y_="Désactivation %s des services %s"
-_Disabling_gpm_g_="Désactivation de gpm (g)"
 _Disabling_more_services_X_="Désactivation de plus de services %s"
 _Disabling_network_services_X_="Désactivation des services réseaux %s"
 _Disabling_some_services_X_="Désactivation de quelques services %s"
