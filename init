@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.54.25"
-           VERSION_DATE="Mon Jun  6 21:05:52 MDT 2016"
+                VERSION="7.54.26"
+           VERSION_DATE="Thu Jun  9 22:18:27 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -711,7 +711,7 @@ read_cmdline_params()
 
                livedir=*|ldir=*) FINAL_DIR=$value                                ;;
         pw|passwd|pw=*|passwd=*) FORCE_PASSWD=true                               ;;
-                      bootchart) INIT_COMMAND=/sbin/bootchartd                   ;;
+                      bootchart) INIT_COMMAND=/sbin/bootchartd ; BOOT_CHART=true ;;
                         noplink) NO_PLINK=,noplink                               ;;
                           plink) NO_PLINK=                                       ;;
 
@@ -4628,6 +4628,7 @@ Initrd_Out
     [ "$FORCE_PASSWD" ]                      && touch $dir/force-passwd
     [ "$DB_PLUS"      ]                      && touch $dir/db+
     [ -n "$BOOT_SAVE" ]                      && touch $dir/bootsave
+    [ "$BOOT_CHART"   ]                      && touch $dir/bootchart
 
     echo "$DISTRO_NAME"                             > $dir/distro
 
