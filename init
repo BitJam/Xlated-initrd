@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.54.27"
-           VERSION_DATE="Fri Jun 10 12:07:06 MDT 2016"
+                VERSION="7.54.29"
+           VERSION_DATE="Sun Jun 19 18:22:04 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -1017,7 +1017,7 @@ select_breakpoints() {
             echo
             echo "${m_co}Remaining ${hi_co}$ME$m_co breakpoints:$nc_co"
             echo
-            sed -rn 's/^\s*breakpoint ([1-9a-z])\>/  \1)/p' $0 | sed "s/['\"]//g" | sort
+            sed -rn 's/^\s*breakpoint ([1-9a-z])\> */  \1) /p' $0 | sed "s/['\"]//g" | sort
             echo
             echo "${m_co}Use \"a\" to set most breakpoints$nc_co"
             echo "${m_co}Use \"A\" to set all breakpoints$nc_co"
@@ -1126,11 +1126,10 @@ do_welcome() {
     vmsg 8 "$cpu_format"  '             Screen width' "$SCREEN_WIDTH"
     vmsg 8 "$cpu_format"  '              Kernel arch' "$(uname -m)"
 
-    local board_name board_vendor id_dir=/sys/class/dmi/id
-    read board_name   2>/dev/null  < $id_dir/board_name
+    local product_name board_vendor id_dir=/sys/class/dmi/id
+    read product_name 2>/dev/null  < $id_dir/product_name
     read board_vendor 2>/dev/null  < $id_dir/board_vendor
-    vmsg 8 "$cpu_format"  '             Mother board' "$board_vendor $board_name"
-
+    vmsg 8 "$cpu_format"  '                 Hardware' "$board_vendor $product_name"
     # vmsg 6  "$cpu_format" '                      CPU' "$(cpu_param 'model name' unknown)"
     # vmsg 6  "$cpu_format" '                    Cores' "$num_co$(cpu_param 'cpu cores'  1)"
     # vmsg 6  "$cpu_format" '                    Cache' "$(cpu_param 'cache size' unknown)"
