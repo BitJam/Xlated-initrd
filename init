@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.54.29"
-           VERSION_DATE="Sun Jun 19 18:22:04 MDT 2016"
+                VERSION="7.54.30"
+           VERSION_DATE="Wed Jun 22 09:21:42 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -216,7 +216,7 @@ main_wrapper() {
 
     # Try running live-usb-save first so it can restore an xorg.conf machine-state file
     confile remasterable && LIVE_SCRIPTS="live-usb-save $LIVE_SCRIPTS"
-    [ "$DO_HWCLOCK" ]    && LIVE_SCRIPTS="$LIVE_SCRIPTS live-hwclock"
+    confile hwclock      && LIVE_SCRIPTS="$LIVE_SCRIPTS live-hwclock"
     confile persist-root force-passwd && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-password"
     confile save-persist && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-autosave"
     # Do this after the above so the changes aren't saved until after a "real" persist-save
@@ -247,9 +247,17 @@ main_wrapper() {
         fi
     fi
 
+    local f rm_list
+    for f in $NEW_ROOT/live/custom/*/menus/*; do
+        case $f in *tz.*) continue;; esac
+        rm_list="$rm_list $f"
+    done
+    rm -f $rm_list
+
     breakpoint bash  "Bash shell right before starting init"
     breakpoint b9    "Bash shell right before starting init"
     breakpoint 9     "right before starting init"
+
 
     stop_hotplug
 
@@ -4628,6 +4636,7 @@ Initrd_Out
     [ "$DB_PLUS"      ]                      && touch $dir/db+
     [ -n "$BOOT_SAVE" ]                      && touch $dir/bootsave
     [ "$BOOT_CHART"   ]                      && touch $dir/bootchart
+    [ "$DO_HWCLOCK"   ]                      && touch $dir/hwclock
 
     echo "$DISTRO_NAME"                             > $dir/distro
 
@@ -4899,8 +4908,6 @@ prepare_switch_root() {
 
     (cd $root_dir/bin && rm -rf fbcondecor_helper ntfs-3g)
     rm -rf /$root_dir/etc/splash
-
-    rm -rf /$root_dir/live/custom/*/menus
 
     # Work around a bug in fbcondecor_helper
     local fbsys=$root_dir/lib/splash/sys
