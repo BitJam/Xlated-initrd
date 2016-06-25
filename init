@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.54.30"
-           VERSION_DATE="Wed Jun 22 09:21:42 MDT 2016"
+                VERSION="7.54.31"
+           VERSION_DATE="Fri Jun 24 19:33:59 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -2429,7 +2429,7 @@ breakpoint() {
 
     custom_code "$bp" "$desc"
 
-    if [ "$DB_PLUS" ]; then
+    if [ "$DB_PLUS" -a -n "${bp##b*}" ]; then
         local now=$(get_time)
         local delta=$(get_seconds $((now - LAST_BP_TIME)))
         vmsg 9 "$green@bp$cyan[$num_co$bp$m_co]$hi_co $(get_seconds $now)s ($delta)$m_co: $desc"
