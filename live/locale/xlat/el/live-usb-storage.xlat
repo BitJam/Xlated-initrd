@@ -1,5 +1,8 @@
 _Configure_LiveUSB_Storage_="Προτιμήσεις του LiveUSB-αποθήκευσης"
+_Could_not_find_UID_or_GUID_for_user_X_="Δεν βρέθηκε UID η GUID για τον χρήστη %s"
 _Disable_LiveUSB_Storage_="Απενεργοποίηση του LiveUSB-αποθήκευσης"
 _Disabling_LiveUSB_storage_="Απενεργοποίηση του LiveUSB-αποθήκευσης"
+_Enable_LiveUSB_storage_at_X_="Ενεργοποίηση του LiveUSB-αποθήκευσης στο %s"
 _Home_directory_for_user_X_not_found_="Κατάλογος του Home %s δεν βρέθηκε"
 _No_default_user_X_found_on_the_system_="Προεπιλεγμένο χρήστης %s δε βρέθηκε στο σύστημα."
+_The_file_X_is_not_a_directory_="Το αρχείο %s δεν είναι κατάλογος"
