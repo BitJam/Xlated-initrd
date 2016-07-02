@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.54.32"
-           VERSION_DATE="Tue Jun 28 20:52:30 MDT 2016"
+                VERSION="7.54.33"
+           VERSION_DATE="Fri Jul  1 18:02:53 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -95,22 +95,20 @@
   LIVE_X64_LD_PATH="/lib:/lib/x86_64-linux-gnu:/usr/lib"
   LIVE_386_LD_PATH="/lib:/lib/i386-linux-gnu:/usr/lib"
 
-MKFS_FREE_MARGIN=20
+MKFS_FREE_MARGIN=10
   rootfs_SIZE_PARAM="min_size=250 mid_size=100 max_size=2000 factor=50"
-  homefs_SIZE_PARAM="min_size=250 mid_size=100 max_size=4000 factor=25"
-
-    VFAT_MKFS_SIZES="250 375 500 750 1000 1500 2000 2500 3000 4000"
-         MKFS_SIZES="250 375 500 750 1000 1500 2000 2500 3000 4000 5000 6000"
+  homefs_SIZE_PARAM="min_size=10 mid_size=100 max_size=4000 factor=25"
+         MKFS_SIZES="250 375 500 750 1000 1500 2000 2500 3000 4000"
+       BIGGER_SIZES="5000 6000"
+      SMALLER_SIZES="10 100 175"
 
       LIVE_SCRIPTS="live-L10n live-init"
-
       LAST_BP_TIME=0
-
           NO_PLINK=""
-
    DEFAULT_UNIONFS="overlay"
+   OPTIONS_ENTRIES="toram|from=usb|password|nousb2"
 
-   OPTIONS_ENTRIES="toram|from=usb|private|nousb2"
+         LAZYTIME=",lazytime"
 
 set_live_dirs() {
     local dir=$1
@@ -252,7 +250,7 @@ main_wrapper() {
     fi
 
     local f rm_list
-    for f in $NEW_ROOT/live/custom/*/menus/*; do
+    for f in $NEW_ROOT/live/menus/*; do
         case $f in *tz.*) continue;; esac
         rm_list="$rm_list $f"
     done
@@ -734,6 +732,8 @@ read_cmdline_params()
              disable=*|nosysv=*) DISABLE_SERVICES="$DISABLE_SERVICES$value" ; DS_PARAM=$param  ;;
 
                    disablestore) DISABLE_STORE=true                              ;;
+                         nolazy) LAZYTIME=                                       ;;
+                       lazytime) LAZYTIME=,lazytime                              ;;
 
         #----- These get interpreted late but we don't want them to be unknown
                 hwclock=*|hwc=*)  ;;
@@ -2214,6 +2214,7 @@ try_mount() {
     local fatopts=$winopts,shortname=winnt,uid=$USER_UID,gid=$USER_GID
 
     case $type in
+            ext4) log_cmd mount -t $type   -o $opts$LAZYTIME  $dev "$mp" 2>/dev/null ;;
         ext[234]) log_cmd mount -t $type   -o $opts           $dev "$mp" 2>/dev/null ;;
             vfat) log_cmd mount -t vfat    -o $fatopts        $dev "$mp" 2>/dev/null ;;
          iso9660) log_cmd mount -t iso9660 -o ro              $dev "$mp" 2>/dev/null ;;
@@ -2227,11 +2228,12 @@ try_mount() {
 
 try_file_mount() {
     local file=$1  mp=$2  rw=${3:-$RW_MODE}
+    local opts=loop,$rw,noatime
 
     #mount -t reiserfs         -o loop,$rw,noatime "$file" "$mp"  2>/dev/null || \
-        mount -t ext4         -o loop,$rw,noatime "$file" "$mp"  2>/dev/null || \
-            mount -t ext3     -o loop,$rw,noatime "$file" "$mp"  2>/dev/null || \
-                mount -t ext2 -o loop,$rw,noatime "$file" "$mp"  2>/dev/null
+        mount -t ext4 -o $opts$LAZYTIME "$file" "$mp"  2>/dev/null || \
+        mount -t ext3 -o $opts          "$file" "$mp"  2>/dev/null || \
+        mount -t ext2 -o $opts          "$file" "$mp"  2>/dev/null
     return $?
 }
 
@@ -2985,6 +2987,7 @@ xlat_mfile() {
 
 do_early_menus() {
     local BOOT_MENU_DIR=/live/custom/$DISTRO_NAME/menus
+    local BOOT_MENU_DIR=/live/menus
     local MENU_VALUE BOOT_MENU_WARN=true
     local lang time_zone option persist desktop
     local cmdline
@@ -2998,6 +3001,7 @@ do_early_menus() {
 
     my_select_menu  "$_Select_Timezone_"            "$_Timezones_are_listed_by_longitude_"     t tz        "$_Timezone_"      'tz=*'
     my_select_menu  "$_Select_Option_"              "$_Only_one_option_can_be_selected_"       o options   "$_Options_"       "$OPTIONS_ENTRIES"
+    my_select_menu  "$_Select_Mounting_Option_"     "$_Automounting_is_enabled_by_default_"    m mount     "$_Mount_"          "$_automount_mount_"
     my_select_menu  "$_Select_Persistence_Option_" ""                                      p persist   "$_Persistence_"   'persist_*|frugal_*'
     my_select_menu  "$_Select_font_size_"           "$_Scale_fonts_in_graphics_display_Default_is_1_0_"  f fontsize  "$_Font_size_" 'fontsize=*'
     #vmsg 6 "cmdline:$white $cmdline"
@@ -3013,6 +3017,7 @@ do_late_menus() {
 
     if [ "$REMASTERABLE" ]; then
         BOOT_MENU_DIR=/live/custom/$DISTRO_NAME/menus
+        BOOT_MENU_DIR=/live/menus
         my_select_menu  "$_Save_these_changes_" "" s save  "$_Save_"
         echo "$cmdline" | grep -q bootsave && BOOT_SAVE=true
     fi
@@ -4035,11 +4040,14 @@ _persist_makefs() {
 
     # Make sure we don't exceed max size of 4G - 1 on vfat file systems
     mkdir -p $dir
-    local par_fstype=$(mntpnt_fstype $dir) mkfs_sizes vfat
+    local par_fstype=$(mntpnt_fstype $dir) mkfs_sizes=$MKFS_SIZES vfat
     case $par_fstype in
-        vfat) mkfs_sizes=$VFAT_MKFS_SIZES ; vfat=true ;;
-           *) mkfs_sizes=$MKFS_SIZES                  ;;
+        vfat) vfat=true ;;
+           *) mkfs_sizes="$mkfs_sizes $BIGGER_SIZES" ;;
     esac
+
+    [ "$base_file" = homefs ] && mkfs_sizes="$SMALLER_SIZES $mkfs_sizes" ;;
+
     local max_mkfs_size=${mkfs_sizes##* }
 
     # Create a menu of sizes.  Include the default size
@@ -4122,7 +4130,7 @@ _persist_makefs() {
     breakpoint m "before makefs"
 
     [ "$vfat" ] &&  warn  "Warning: this can take several minutes per Gig on a %s file system" $(pqw $par_fstype)
-    if ! time_cmd makefs $full_file $fs_type $fs_size; then
+    if ! time_cmd makefs $full_file $fs_type $fs_size $par_fstype; then
         err  "Failed to create filesystem.  Deleting %s file" $(pqe $file)
         rm -f $full_file
         return 3
@@ -4137,9 +4145,15 @@ _persist_makefs() {
 }
 
 makefs() {
-    local file=$1  type=$2  size=$3
-    mkdir -p $(dirname $file)                                                 || return 1
-    dd if=/dev/zero of=$file bs=1M count=0 seek=$size 1>> $MY_LOG 2>> $MY_LOG || return 2
+    local file=$1  fstype=$2  size=$3  par_fstype=$4  dir=$(dirname $file)
+    mkdir -p $dir                                                             || return 1
+    local fallocate=$(ld_path_which fallocate)
+    [ "$fallocate" ] || par_fstype=other
+
+    case $par_fstype in
+        ext4|btrfs) ld_path $fallocate --length ${size}M $file        1>> $MY_LOG 2>>$MY_LOG || return 2  ;;
+                 *) dd if=/dev/zero of=$file bs=1M count=0 seek=$size 1>> $MY_LOG 2>> $MY_LOG || return 2 ;;
+    esac
     sync
     ld_path /sbin/mkfs.$type -q -F $file              1>> $MY_LOG 2>> $MY_LOG || return 3
 }
@@ -4148,7 +4162,7 @@ default_makefs_size() {
     local avail=$1  size=$3  params
     eval params=\$$2
     eval local $params
-    [ "$avail" -lt $mid_size ] && factor=1
+    [ "$avail" -lt $mid_size ] && factor=100
     [ "$size" ] || size=$((mid_size + factor * ( avail - mid_size ) / 100))
     [ $size -gt $max_size ] && size=$max_size
     [ $size -gt $avail    ] && size=$avail
@@ -4920,7 +4934,7 @@ prepare_switch_root() {
     mountpoint $fbsys &>/dev/null && umount $fbsys
 
     local dir old new
-    for dir in bin config etc lib locale custom; do
+    for dir in bin config etc lib locale custom menus; do
         old=$root_dir/$dir
         test -e $old || old=$live_dir/$dir
         new=$new_live/$dir
