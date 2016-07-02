@@ -1,18 +1,15 @@
    1)  Per omissió
    2)  checkmd5        Comprova la integritat del suport autònom
-   3)  checkfs         Comprova els sistemes de fitxers ext2/3/4 i persistent de l'USB autònom
+   3)  checkfs         Check LiveUSB and persistence ext2/3/4 file systems
    4)  toram           Copia el sistema de fitxers comprimit a la RAM
    5)  from=usb        Acaba l'arrencada des de l'USB autònom
-   6)  nousb2          Inhabilita tots els dispositius USB-2 en arrencar
-   7)  automount       Munta els dispositius automàticament en connectar-los
-   8)  mount=usb       ... i munta tots els dispositius USB en arrencar
-   9)  mount=all       ... i munta TOTS els dispositius en arrencar
-  10)  mount=off       Inhabilita tots els muntatges extra
-  11)  hwclock=ask     Deixa que el sistema ajudi a trobar la configuració de rellotge
-  12)  hwclock=utc     El rellotge del maquinari usa UTC (sistemes amb només Linux)
-  13)  hwclock=local   El rellotge de maquinari usa l'hora local (sistemes amb Windows)
-  14)  private         Canvieu les contrasenyes abans d'arrencar
-  15)  nostore         Inhabilita la característica d'emmagatzematge d'USB autònom
-  16)  dostore         Activa l'opció d'emmagatzematge LiveUSB
-  17)  savestate       Desa alguns fitxers entre arrencades (només USB autònom)
-  18)  nosavestate     No desis fitxers entre arrencades (només USB autònom)
+   6)  from=hd         Finish booting from a hard drive
+   7)  nousb2          Inhabilita tots els dispositius USB-2 en arrencar
+   8)  hwclock=ask     Deixa que el sistema ajudi a trobar la configuració de rellotge
+   9)  hwclock=utc     El rellotge del maquinari usa UTC (sistemes amb només Linux)
+  10)  hwclock=local   El rellotge de maquinari usa l'hora local (sistemes amb Windows)
+  11)  private         Canvieu les contrasenyes abans d'arrencar
+  12)  nostore         Disable LiveUSB-Storage feature (LiveUSB only)
+  13)  dostore         Enable LiveUSB-Storage feature (LiveUSB only)
+  14)  savestate       Desa alguns fitxers entre arrencades (només USB autònom)
+  15)  nosavestate     No desis fitxers entre arrencades (només USB autònom)

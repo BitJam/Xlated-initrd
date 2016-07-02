@@ -1,18 +1,15 @@
    1)  По умолчанию
    2)  checkmd5        Проверить целостность живого носителя
-   3)  checkfs         Проверить файловые системы LiveUSB ext2/3/4 и файла сохранения
+   3)  checkfs         Check LiveUSB and persistence ext2/3/4 file systems
    4)  toram           Копировать сжатую ФС в RAM
    5)  from=usb        Завершить загрузку с Live USB
-   6)  nousb2          Отключить все USB-2 устройства при загрузке
-   7)  automount       Автоматически монтировать устройства при подключении
-   8)  mount=usb       ... И смонтировать все USB-устройства во время загрузки
-   9)  mount=all       ... И смонтировать ВСЕ устройства во время загрузки
-  10)  mount=off       Отключить монтирование всех внешних устройств
-  11)  hwclock=ask     Система должна помочь определить настройки часов
-  12)  hwclock=utc     Аппаратные часы используют UTC (только для Linux)
-  13)  hwclock=local   Аппаратные часы используют местное время (Windows)
-  14)  private         Изменить пароль перед загрузкой
-  15)  nostore         Отключить функцию сохранения LiveUSB
-  16)  dostore         Включить функцию сохранения LiveUSB
-  17)  savestate       Сохранить некоторые файлы после перезагрузки (только Live USB)
-  18)  nosavestate     Не сохранять файлы после перезагрузки (только LiveUSB)
+   6)  from=hd         Finish booting from a hard drive
+   7)  nousb2          Отключить все USB-2 устройства при загрузке
+   8)  hwclock=ask     Система должна помочь определить настройки часов
+   9)  hwclock=utc     Аппаратные часы используют UTC (только для Linux)
+  10)  hwclock=local   Аппаратные часы используют местное время (Windows)
+  11)  private         Изменить пароль перед загрузкой
+  12)  nostore         Disable LiveUSB-Storage feature (LiveUSB only)
+  13)  dostore         Enable LiveUSB-Storage feature (LiveUSB only)
+  14)  savestate       Сохранить некоторые файлы после перезагрузки (только Live USB)
+  15)  nosavestate     Не сохранять файлы после перезагрузки (только LiveUSB)
