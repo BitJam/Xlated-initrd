@@ -52,6 +52,7 @@ _Loading_hardware_specific_modules_="Carregant els mòduls específics de maquin
 _Look_for_X_device_with_Y_="Cerca dispositius %s amb %s"
 _Look_for_file_s_X_on_device_s_Y_="Cercant %s fitxer(s) al(s) dispositiu(s) %s"
 _Looking_for_partitions_with_at_least_X_free_Please_wait_="Cercant particions amb %s lliure com a mínim. Si us plau, espereu..."
+_Mount_="Munta"
 _Mount_persistence_device_if_needed_="Munta el dispositiu de persistència (si cal)"
 _Mounted_X_device_Mounted_device_Y_at_Z_="Muntat el dispositiu %s. Muntat el dispositiu %s a %s"
 _Neither_X_nor_Y_is_available_="No es troba %s ni %s"
