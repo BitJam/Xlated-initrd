@@ -36,7 +36,7 @@
           PERSIST_RETRY=10
     FAILSAFE_BOOT_RETRY=30
 
-    DISABLE_SERVICES_OPTS="(c[0-9]+(\.[0-9]*)?|c\.[0-9]+|[DLMPSXacdgklmnrsvwx])+"
+    DISABLE_SERVICES_OPTS="(c[0-9]+(\.[0-9]*)?|c\.[0-9]+|[DLMPSXacdgklmnNrsvwx])+"
 
            RW_MODE="ro"
        #DISTRO_NAME="Linux"
@@ -64,7 +64,8 @@
          FROM_TYPE="usb,cd"
      FROM_TYPE_ALL="usb,cd,hd"
 
-      FRUGAL_FILES="linuxfs linuxfs.md5 vmlinuz vmlinuz.md5 initrd.gz initrd.gz.md5 xtra xtra.tgz ../boot"
+      FRUGAL_FILES="linuxfs vmlinuz vmlinuz1 initrd.gz xtra xtra.tgz"
+      FRUGAL_FILES="$FRUGAL_FILES ../boot ../efi ../cdrom.ico ../version"
 
      MAX_MOUNT_CNT=30
        RETRY_DELAY=50               # in hundredths of a second
@@ -256,10 +257,11 @@ main_wrapper() {
     done
     rm -f $rm_list
 
+    dmesg > $NEW_ROOT/live/config/dmesg.out
+
     breakpoint bash  "Bash shell right before starting init"
     breakpoint b9    "Bash shell right before starting init"
     breakpoint 9     "right before starting init"
-
 
     stop_hotplug
 
@@ -480,7 +482,7 @@ main_core() {
         vmsg 8 "$green@${cyan} Extras took$hi_co $delta${cyan} seconds"
     fi
 
-    test -e /$NEW_ROOT/etc/issue || cp /issue $NEW_ROOT/etc/issue
+    [ ! -e /$NEW_ROOT/etc/issue -o -n "$FORCE_ISSUE" ] && cp /issue $NEW_ROOT/etc/issue
 
     # FIXME: do this after copy_xtra for easy testing (for now) (????)
     PROC_CMDLINE=$(cat /live/config/proc-cmdline)
@@ -734,6 +736,8 @@ read_cmdline_params()
                    disablestore) DISABLE_STORE=true                              ;;
                          nolazy) LAZYTIME=                                       ;;
                        lazytime) LAZYTIME=,lazytime                              ;;
+
+                          issue) FORCE_ISSUE=true                                ;;
 
         #----- These get interpreted late but we don't want them to be unknown
                 hwclock=*|hwc=*)  ;;
@@ -1096,16 +1100,11 @@ do_welcome() {
     vmsg 2  "$_Welcome_to_X_" "$(pq $pretty_name$arch)!"
 
     (   imsg  "$_Welcome_to_X_Powered_by_Y_" "$(gq $pretty_name$arch)" "$(gq Debian)."
-        if [ -n "$CLI_INSTALLER" ] ;then
+        if [ -n "$CLI_INSTALLER" ]; then
             echo
             imsg  "$_For_command_line_install_login_as_X_password_Y_" "$(gq root)" "$(gq root)"
             imsg  "$_Enter_the_command_X_Follow_the_instructions_" "$(gq $CLI_INSTALLER)"
         fi
-
-        #imsg "For cli install, login as %s (password is %s) and type %s" \
-        #    "$(gq root)" "$(gq root)" "$(gq cli-installer)"
-        #imsg "Follow the instructions."
-
     ) > /issue
 
     if lspci -n | grep -iq " 80ee:beef"; then
@@ -1858,9 +1857,7 @@ find_frugal_file() {
     local actual=$(file_usage_m $old_dir $FRUGAL_FILES)
 
     # Safety first!
-    local needed=$((actual + 10))
-
-    [ "$FRUGAL_NEEDED" ] && needed=$FRUGAL_NEEDED
+    local needed=${FRUGAL_NEEDED:=$((actual + 10))}
 
     if  [ -z "$device" ]; then
 
@@ -1916,7 +1913,7 @@ find_frugal_file() {
 
         msg  "$_copy_X_to_Y_" $(pq $(size_label_m $actual)) $(pq $sqfile_dir/)
 
-        if ! time_cmd copy_files $old_dir $sqfile_dir $FRUGAL_FILES; then
+        if ! time_cmd copy_files_md5 $old_dir $sqfile_dir $FRUGAL_FILES; then
             warn  "Copy failed.  Erasing partial copy"
             log_cmd rm -f $sqfile_full
             return 40
@@ -2893,7 +2890,7 @@ my_select_menu() {
         return
     fi
 
-    local default_str=$(rpad  "$_Default_" 16)
+    local default_str=$(rpad 16  "$_Default_")
     local menu=$(cat $mfile | sed -r \
         -e "s/Default( {8}| *$)/$default_str/" \
         -e "s/( [0-9]+)(\))/$green\1$white\2$cyan/g" \
@@ -2929,13 +2926,9 @@ my_select_menu() {
 }
 
 rpad() {
-    local str=$1 width=$2
-    local len=$(echo $str | wc -m)
-    local pad=$((width - len))
-    if [ $pad -le 0 ]; then
-        echo -n "$str"
-        return
-    fi
+    local width=$1  str=$2
+    local pad=$((width - $(echo $str | wc -m)))
+    [ $pad -le 0 ] && pad=0
     printf "%s%${pad}s" "$str" ""
 }
 
@@ -2986,7 +2979,6 @@ xlat_mfile() {
 }
 
 do_early_menus() {
-    local BOOT_MENU_DIR=/live/custom/$DISTRO_NAME/menus
     local BOOT_MENU_DIR=/live/menus
     local MENU_VALUE BOOT_MENU_WARN=true
     local lang time_zone option persist desktop
@@ -3016,7 +3008,6 @@ do_late_menus() {
     my_select_menu  "$_Select_Desktop_" "" d desktop  "$_Desktop_" 'desktheme=*'
 
     if [ "$REMASTERABLE" ]; then
-        BOOT_MENU_DIR=/live/custom/$DISTRO_NAME/menus
         BOOT_MENU_DIR=/live/menus
         my_select_menu  "$_Save_these_changes_" "" s save  "$_Save_"
         echo "$cmdline" | grep -q bootsave && BOOT_SAVE=true
@@ -3389,6 +3380,19 @@ file_usage_m() {
     done
     du -scxm $list >> $MY_LOG
     du -scxm $list | tail -n 1 | cut -f1
+}
+
+copy_files_md5() {
+    local f file sorc=$1  dest=$2
+    shift 2
+    [ "$sorc" -a "${sorc##*/}" ] && sorc=$sorc/
+    for f; do
+        for file in $sorc$f $sorc$f.md5; do
+            [ -e $file ] || continue
+            cp -a $sorc$f $dest/ || return $?
+        done
+    done
+    return 0
 }
 
 copy_files() {
@@ -4040,8 +4044,8 @@ _persist_makefs() {
 
     # Make sure we don't exceed max size of 4G - 1 on vfat file systems
     mkdir -p $dir
-    local par_fstype=$(mntpnt_fstype $dir) mkfs_sizes=$MKFS_SIZES vfat
-    case $par_fstype in
+    local part_fstype=$(mntpnt_fstype $dir) mkfs_sizes=$MKFS_SIZES vfat
+    case $part_fstype in
         vfat) vfat=true ;;
            *) mkfs_sizes="$mkfs_sizes $BIGGER_SIZES" ;;
     esac
@@ -4088,7 +4092,7 @@ _persist_makefs() {
     heading  "$_create_X_persistence_file_" "$(fq $file)"
     vmsg 1  "$_Default_size_X_Meg_Filesystem_type_Y_" $(nq $default_size) $(pq ext4)
     vmsg 1  "$_This_default_size_will_leave_X_Meg_free_" $(nq $((avail - default_size)))
-    [ "$vfat" ] &&  warn  "Warning: this can take several minutes per Gig on a %s file system" $(pqw $par_fstype)
+    [ "$vfat" ] &&  warn  "Warning: this can take several minutes per Gig on a %s file system" $(pqw $part_fstype)
 
     if [ "$AUTO_MAKE_FS" ]; then
         auto_mode=true
@@ -4129,8 +4133,8 @@ _persist_makefs() {
 
     breakpoint m "before makefs"
 
-    [ "$vfat" ] &&  warn  "Warning: this can take several minutes per Gig on a %s file system" $(pqw $par_fstype)
-    if ! time_cmd makefs $full_file $fs_type $fs_size $par_fstype; then
+    [ "$vfat" ] &&  warn  "Warning: this can take several minutes per Gig on a %s file system" $(pqw $part_fstype)
+    if ! time_cmd makefs $full_file $fs_type $fs_size $part_fstype; then
         err  "Failed to create filesystem.  Deleting %s file" $(pqe $file)
         rm -f $full_file
         return 3
@@ -4145,17 +4149,17 @@ _persist_makefs() {
 }
 
 makefs() {
-    local file=$1  fstype=$2  size=$3  par_fstype=$4  dir=$(dirname $file)
+    local file=$1  fstype=$2  size=$3  part_fstype=$4  dir=$(dirname $file)
     mkdir -p $dir                                                             || return 1
     local fallocate=$(ld_path_which fallocate)
-    [ "$fallocate" ] || par_fstype=other
+    [ "$fallocate" ] || part_fstype=other
 
-    case $par_fstype in
+    case $part_fstype in
         ext4|btrfs) ld_path $fallocate --length ${size}M $file        1>> $MY_LOG 2>>$MY_LOG || return 2  ;;
-                 *) dd if=/dev/zero of=$file bs=1M count=0 seek=$size 1>> $MY_LOG 2>> $MY_LOG || return 2 ;;
+                 *) dd if=/dev/zero of=$file bs=1M count=0 seek=$size 1>> $MY_LOG 2>>$MY_LOG || return 2 ;;
     esac
     sync
-    ld_path /sbin/mkfs.$type -q -F $file              1>> $MY_LOG 2>> $MY_LOG || return 3
+    ld_path /sbin/mkfs.$type -q -F $file 1>> $MY_LOG 2>> $MY_LOG || return 3
 }
 
 default_makefs_size() {
