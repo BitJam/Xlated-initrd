@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.54.34"
-           VERSION_DATE="Tue Jul 19 13:08:38 MDT 2016"
+                VERSION="7.60.01"
+           VERSION_DATE="Mon Oct  3 21:25:12 MDT 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -65,7 +65,7 @@
      FROM_TYPE_ALL="usb,cd,hd"
 
       FRUGAL_FILES="linuxfs vmlinuz vmlinuz1 initrd.gz xtra xtra.tgz"
-      FRUGAL_FILES="$FRUGAL_FILES ../boot ../efi ../cdrom.ico ../version"
+      FRUGAL_FILES="$FRUGAL_FILES ../boot ../efi ../EFI ../cdrom.ico ../version"
 
      MAX_MOUNT_CNT=30
        RETRY_DELAY=50               # in hundredths of a second
@@ -242,9 +242,12 @@ main_wrapper() {
         else
             confile remasterable && run_init_scripts $NEW_ROOT live-usb-storage
 
-            local new_config=$NEW_ROOT/etc/live/config
-            mkdir -p $new_config
-            mount --bind /live/aufs/live/config $new_config
+            local dir new_dir
+            for dir in config bin; do
+                local new_dir=$NEW_ROOT/etc/live/$dir
+                mkdir -p $new_dir
+                mount --bind /live/aufs/live/$dir $new_dir
+            done
 
             chmod 700 $NEW_ROOT/live
         fi
@@ -460,16 +463,8 @@ main_core() {
     rm -f $NEW_ROOT$BLACK_LIST_FILE
     [ -e $BLACK_LIST_FILE ] && cp $BLACK_LIST_FILE $NEW_ROOT$BLACK_LIST_FILE
 
-    [ "$WANT_HOMEFS" ] && copy_homefs $PERSIST_FULL_PATH
-
-    if mount_persist_file 'homefs' $NEW_ROOT/home 'home' "$WANT_HOMEFS" "$NEED_HOMEFS"; then
-        HOMEFS_DEV=$PERSIST_DEVICE
-        msg  "$_Enabled_X_persistence_" "$(cq home)"
-        PERSISTENCE="$PERSISTENCE,home"
-
-    else
-        [ "$NEED_HOMEFS" ] && non_fatal  "Could not enable required %s persistence" "$(pqh home!)"
-    fi
+    [ "$WANT_HOMEFS" ] \
+        && mount_homefs $PERSIST_FULL_PATH/homefs $NEW_ROOT/home "$WANT_HOMEFS" "$NEED_HOMEFS"
 
     [ "$DB_PLUS"       ] && local plus_t1=$(get_time)
     [ "$DO_XTRA"       ] && copy_xtra    $DEFAULT_DIR
@@ -3368,7 +3363,7 @@ old_cp_dir() {
     return $ret
 }
 
-# FIXME: should use ld_path and --apparent-size se we aren't fooled by sparseness
+# FIXME: should use ld_path and --apparent-size so we aren't fooled by sparseness
 file_usage_m() {
     local f file dir=$1
     shift
@@ -3409,7 +3404,8 @@ copy_files() {
 
 all_space()      { $LIVE_BIN/df -m "$1" | awk '{size=$2}END{print size}' ;}
 used_space()     { $LIVE_BIN/df -m "$1" | awk '{size=$3}END{print size}' ;}
-#free_space()     { $LIVE_BIN/df -m "$1" | awk '{size=$4}END{print size}' ;}
+avail_space()    { $LIVE_BIN/df -m "$1" | awk '{size=$4}END{print size}' ;}
+du_size()        { du -scm "$@"         | tail -n1 | cut -f1             ;}
 get_mountpoint() { grep "^$1 " /proc/mounts | cut -d" " -f2              ;}
 
 # This compensates for sparse rootfs and homefs files one directory down from
@@ -4155,11 +4151,12 @@ makefs() {
     [ "$fallocate" ] || part_fstype=other
 
     case $part_fstype in
-        ext4|btrfs) ld_path $fallocate --length ${size}M $file        1>> $MY_LOG 2>>$MY_LOG || return 2  ;;
+        ext4|btrfs) ld_path $fallocate --length ${size}M $file        1>> $MY_LOG 2>>$MY_LOG || return 2 ;;
                  *) dd if=/dev/zero of=$file bs=1M count=0 seek=$size 1>> $MY_LOG 2>>$MY_LOG || return 2 ;;
     esac
     sync
-    ld_path /sbin/mkfs.$type -q -F $file 1>> $MY_LOG 2>> $MY_LOG || return 3
+    ld_path /sbin/mkfs.$fstype -q -F $file 1>> $MY_LOG 2>> $MY_LOG || return 3
+    return 0
 }
 
 default_makefs_size() {
@@ -4348,15 +4345,86 @@ remaster_rootfs() {
     fi
 }
 
-copy_homefs() {
-    local homefs=$1/homefs
+#------------------------------------------------------------------------------
+# Do the dirty work in addition to mounting homefs: copy homefs to homefs.new
+# for easy re-sizing; offer to copy /home files that would be hidden by
+# mounting homefs.
+#------------------------------------------------------------------------------
+mount_homefs() {
+    local homefs=$1  real_home=$2  want=$3  need=$4  temp_home=/tmp/home
+    [ "$want" ] || return
 
-    [ -e "$homefs.new" ] || return
+    # First do the resize copy
+    local new=$homefs.new
+    if [ -e "$new" ]; then
+        copy_homefs "$homefs" || mv $new $homefs.bad
+    fi
 
-    _copy_homefs "$homefs"  || mv $homefs.new $homefs.bad
+    mkdir -p $temp_home $real_home
+    # Now mount the homefs at a temporary mount point
+    if ! mount_persist_file 'homefs' $temp_home 'home' "$want" "$need"; then
+        [ "$need" ] && non_fatal  "Could not enable required %s persistence" "$(pqh home!)"
+        return
+    fi
+
+    if ! offer_copy_home_dir  $real_home  $temp_home; then
+        if ! YES_no  "$_Do_you_want_to_enable_home_persistence_anyway_"; then
+            log_cmd umount $temp_home
+            return
+        fi
+    fi
+
+    # Move the homefs mount to its real location
+    if mount -o move $temp_home $real_home; then
+        HOMEFS_DEV=$PERSIST_DEVICE
+        msg  "$_Enabled_X_persistence_" "$(cq home)"
+        PERSISTENCE="$PERSISTENCE,home"
+    else
+        err  "$_Strange_couldnt_move_the_homefs_mountpoint_"
+        [ "$need" ] && non_fatal  "Could not enable required %s persistence" "$(pqh home!)"
+    fi
 }
 
-_copy_homefs() {
+offer_copy_home_dir() {
+    local real=$1  temp=$2
+
+    empty_dir $real && return 0
+    empty_dir $temp || return 0
+
+    local needed=$(du_size $real)
+    local avail=$(avail_space $temp)
+    local margin=$((avail - needed))
+    msg  "$_There_are_X_Meg_of_files_that_will_get_hidden_by_home_persistence_"  $(nq $needed)
+    msg  "$_There_are_X_Meg_free_on_the_home_persistence_device_"                $(nq $avail)
+
+    if [ $margin -lt 50 ]; then
+        msg  "$_Theres_not_enough_space_to_copy_all_the_files_"
+        return 1
+    fi
+
+    YES_no  "$_Do_you_want_to_copy_the_files_to_the_home_persistence_device_" \
+        || return 2
+
+    # copy files here
+    time_cmd ld_path rsync -aq --delete $real/ $temp/
+    local ret=$?
+
+    # FIXME:  Then offer to erase if extra not in linuxfs?
+}
+
+empty_dir() {
+    local dir=$1
+    local cnt=$(ls "$dir" | grep -v "^lost+found$" | wc -l)
+    msg "files in $dir: $cnt"
+
+    [ $cnt -eq 0 ]
+    return $?
+}
+
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
+copy_homefs() {
     local homefs=$1
 
     if ! [ -e "$homefs" ]; then
@@ -4365,8 +4433,7 @@ _copy_homefs() {
         return 0
     fi
 
-    local new_home_mp=/tmp/homefs.new
-    local cur_home_mp=/tmp/homefs
+    local cur_home_mp=/tmp/homefs  new_home_mp=/tmp/homefs.new
 
     log_cmd mkdir -p $cur_home_mp $new_home_mp
 
@@ -4383,7 +4450,7 @@ _copy_homefs() {
     local need_meg=$(used_space $cur_home_mp)
     local have_meg=$(all_space $new_home_mp)
     need_meg=$((need_meg + 10))
-    vmsg 6  "Have %s Megabytes free.  Need %s" "$num_co $have_meg$m_co" "$num_co$need_meg$m_co"
+    vmsg 6  "Have %s Megabytes free.  Need %s" "$(nq $have_meg)" "$(nq $need_meg)"
     if [ "$need_meg" -gt "$have_meg" ]; then
         err  "Not enough room to copy home filesystem"
         return 1
@@ -4395,7 +4462,7 @@ _copy_homefs() {
 
     breakpoint r "Before resize homefs rsync"
 
-    time_cmd ld_path rsync -aq --delete /tmp/homefs/ /tmp/homefs.new/
+    time_cmd ld_path rsync -aq --delete $cur_home_mp/ $new_home_mp/
     local ret=$?
 
     breakpoint r "After resize homefs rsync"
@@ -4458,7 +4525,7 @@ fancy_prompt() {
 #----- Added by live initrd init script
 [ -r $fp_prog ] && source $fp_prog
 [ -n "\$(alias $cmd)" ] && $prompt
-echo \$PATH | grep -q /live/bin || PATH=\$PATH:/live/bin
+echo \$PATH | grep -q /live/bin || PATH=\$PATH:/etc/live/bin
 Fancy_Stuff
 
     fi
