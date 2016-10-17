@@ -32,6 +32,7 @@ _Removing_previous_auto_generated_X_file_="Eliminant el fitxer previ auto-genera
 _Scanning_for_hardware_specific_video_modules_="Escanejant cercant mòduls de vídeo per a maquinari específic..."
 _Setting_Conky_width_to_X_="Amplada de Conky fixada a %s"
 _Setting_X_to_Y_="S'està configurant %s a %s"
+_Setting_console_blanking_timeout_to_X_minute_s_="Temps d'espera del terminal en negre configurat a %s minut(s)"
 _Setting_desktop_delay_to_X_="Retard de l'escriptori fixat a %s"
 _Setting_desktop_theme_to_X_="Definint el tema d'escriptori com a %s"
 _Turning_all_boot_mount_options_off_="Desactivant totes les opcions de muntatge a l'arrencada"
