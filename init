@@ -1129,7 +1129,7 @@ do_welcome() {
     vmsg 8 "$mem_format"  '              Used Memory'  $used_mem
 
     local cpu_format="%s:$white %s"
-    vmsg 8 "$cpu_format"  '             Linux kernel' "$(uname -r)"
+    vmsg 5 "$cpu_format"  '             Linux kernel' "$(uname -r)"
     vmsg 8 "$cpu_format"  '             Screen width' "$SCREEN_WIDTH"
     vmsg 8 "$cpu_format"  '              Kernel arch' "$(uname -m)"
 
