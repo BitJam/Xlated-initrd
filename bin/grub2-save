@@ -159,6 +159,7 @@ Read_File
 
     printf "    Updated file %s\n" $file
     printf "    With: %s\n" "$params"
+    printf "    Kernel: %s\n" $kernel
     sleep 1
 }
 
@@ -172,11 +173,11 @@ gather_params() {
                    BOOT_IMAGE=*)  ;;
           savestate|nosavestate)  ;;
                 nostore|dostore)  ;;
-               checkmd5|checkfs)  ;;
+           md5|checkmd5|checkfs)  ;;
               automount|mount=*)  ;;
                       hwclock=*)  ;;
                       desktop=*)  ;;
-                              *)out=$out${out:+ }$p
+                              *) out=$out${out:+ }$p ;;
         esac
     done
     echo $out
