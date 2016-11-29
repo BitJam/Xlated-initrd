@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.60.14"
-           VERSION_DATE="Sun Nov 27 23:37:53 MST 2016"
+                VERSION="7.60.15"
+           VERSION_DATE="Tue Nov 29 14:45:37 MST 2016"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@mxlinux.org"
 
@@ -110,6 +110,7 @@ MKFS_FREE_MARGIN=10
    OPTIONS_ENTRIES="toram|from=usb|password|nousb2"
 
           LAZYTIME=""
+      MADE_BY_FILE="made-by-live-usb-maker"
 
 set_live_dirs() {
     local dir=$1
@@ -2119,17 +2120,19 @@ need_unionfs() {
     if [ "$okay" ]; then
         [ "$USE_UNIONFS" != "$this" ] && warn  "$_Forcing_use_of_X_to_match_existing_rootfs_file_" $(pqw $this)
         USE_UNIONFS=$this
+        return 0
     else
-        fatal  "$_The_X_filesystem_is_not_available_Cant_use_this_Y_file_" "$this" 'rootfs'
+        non_fatal  "$_The_X_filesystem_is_not_available_Cant_use_this_Y_file_" "$this" 'rootfs'
+        return 1
     fi
 }
 
 check_existing_unionfs() {
     local mp=$1  type
     if test -d $mp/etc; then
-        need_unionfs "$AUFS_OKAY" aufs
+        need_unionfs "$AUFS_OKAY" aufs || return 1
     elif test -d $mp/upper; then
-        need_unionfs "$OVERLAY_OKAY" overlay
+        need_unionfs "$OVERLAY_OKAY" overlay || return 1
     fi
 
     case $USE_UNIONFS in
@@ -2137,6 +2140,8 @@ check_existing_unionfs() {
         overlay) ROOTFS_BASE=$ROOTFS_MP/upper                  ;;
               *) fatal "Unknown unionfs type: $USE_UNIONFS"    ;;
     esac
+
+    return 0
 }
 
 mount_unionfs() {
@@ -4245,9 +4250,9 @@ mount_and_copy_rootfs() {
 
 _mount_and_copy_rootfs() {
     mount_persist_file rootfs "$ROOTFS_MP" root "$WANT_ROOTFS" "$NEED_ROOTFS" || return 1
-    check_existing_unionfs $ROOTFS_MP
     PERSIST_ROOT_FULL="$PERSIST_FULL_PATH/rootfs"
     check_vid "$SQFS_VID" "$ROOTFS_BASE" rootfs.ver                           || return 1
+    check_existing_unionfs $ROOTFS_MP                                         || return 1
     [ "$STATIC_ROOT" ] || copy_persist_to_ram                                 || return 1
 
     return 0
@@ -4746,6 +4751,12 @@ Initrd_Out
     [ -d /sys/class/power_supply ] \
         && grep -q Battery /sys/class/power_supply/*/type 2>/dev/null \
         && touch $dir/laptop
+
+    local f full
+    for f in version $MADE_BY_FILE; do
+        full=$BOOT_MP/$f
+        test -e $fill && cp $full $dir/
+    done
 }
 
 old_write_output_files() {
