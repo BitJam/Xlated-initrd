@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="7.70.01"
-           VERSION_DATE="Sun Mar 19 22:16:58 MDT 2017"
+                VERSION="8.00.03"
+           VERSION_DATE="Tue Apr 18 23:16:35 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -86,6 +86,9 @@
 
           VID_NAME=VID
       LINUXFS_NAME=linuxfs
+        CRYPT_NAME=crypt
+         CRYPT_MAP=live
+      PHRASE_FNAME=.passphrase
 
         BLACK_LIST=
    BLACK_LIST_FILE=/etc/modprobe.d/initrd.conf
@@ -122,6 +125,7 @@ set_live_dirs() {
 
          FRUGAL_MP="$dir/frugal"
            BOOT_MP="$dir/boot-dev"
+           BIOS_MP="$dir/bios-dev"
         ISO_DEV_MP="$dir/iso-dev"
        ISO_FILE_MP="$dir/iso-file"
           TORAM_MP="$dir/to-ram"
@@ -131,6 +135,7 @@ set_live_dirs() {
         PERSIST_MP="$dir/persist-dev"
            SQFS_MP="$dir/linux"         # where the linuxfs file gets *mounted*
       WRAP_FILE_MP="$dir/wrapper"
+          PLAIN_MP="$dir/plain"
         OUTPUT_DIR="$dir/config"
         LOCALE_DIR="$dir/locale"
         CUSTOM_DIR="$dir/custom"
@@ -240,6 +245,7 @@ main_wrapper() {
     sync
     late_umount $PERSIST_DEVICE
     late_umount $SQFILE_DEV
+    late_umount $BIOS_DEV
 
     if [ -z "$DISABLE_STORE" ]; then
         if detect_old_persist_scripts $NEW_ROOT; then
@@ -372,6 +378,8 @@ main_core() {
     # will always work
     #[ "$NO_EHCI" ] && disable_hcd ehci
 
+    #[ "$SET_CRYPT" -a -z "$NO_CRYPT" ] && setup_crypt "$CRYPT_ID" "$BOOT_DIR/$CRYPT_NAME" "$BOOT_MP"
+
     breakpoint 3 "before looking for linuxfs file"
 
     RW_MODE=ro
@@ -393,8 +401,11 @@ main_core() {
     BOOT_UUID=$(device_uuid $SQFILE_DEV)
     [ "$BOOT_UUID" ] && vmsg 6 "boot device uuid: $BOOT_UUID"
 
-    breakpoint 4 "after mounting boot device"
+    vmsg 7 "BOOT_MP:    $BOOT_MP"
+    vmsg 7 "SQFILE_DEV: $SQFILE_DEV"
+    vmsg 7 "SQFILE_MP   $SQFILE_MP"
 
+    breakpoint 4 "after mounting boot device"
     mount -o remount,rw $SQFILE_DEV 2>/dev/null
     dir_has_param "$SQFILE_MP" rw || REMASTERABLE=
     [ "$REMASTERABLE" ] && do_remaster "$SQFILE_FULL"
@@ -490,9 +501,7 @@ main_core() {
     [ "$DO_MENUS" ] && do_late_menus
     echo "$PROC_CMDLINE" > /live/config/proc-cmdline
 
-    [ "$NO_NEW_OUTPUT" ] || write_output_files     $OUTPUT_DIR
-    [ "$NO_OLD_OUTPUT" ] || old_write_output_files $OUTPUT_DIR
-
+    write_output_files $OUTPUT_DIR
     update_store_file "$NO_STORE" "$DO_STORE"
 
     mkdir -p $NEW_ROOT/etc/live
@@ -523,6 +532,8 @@ SQFILE_DEV="$SQFILE_DEV"
 HOMEFS_DEV="$HOMEFS_DEV"
 ROOTFS_DEV="$ROOTFS_DEV"
 LINUXFS_DEV="$LINUXFS_DEV"
+BIOS_DEV="$BIOS_DEV"
+CRYPT_DEV="$CRYPT_DEV"
 Late_Umount
 }
 
@@ -542,7 +553,6 @@ system_mount() {
     mkdir -p $dir/dev/pts
     mount -t devpts devpts $dir/dev/pts
 }
-
 
 make_nodes() {
     local dir=$1
@@ -634,8 +644,6 @@ read_cmdline_params()
                           menus) DO_MENUS=${MENUS_LIST:-ltopfs}                  ;;
                         menus=*) DO_MENUS=$DO_MENUS$value                        ;;
             rootdelay=*|delay=*) small_int COLDPLUG_DELAY $param                 ;;
-                       old-conf) NO_NEW_OUTPUT=true                              ;;
-                       new-conf) NO_OLD_OUTPUT=true                              ;;
                          splash) SPLASH_PARAM=v                                  ;;
                        splash=*) SPLASH_PARAM=$value                             ;;
                        poweroff) poweroff -f -n                                  ;;
@@ -653,6 +661,14 @@ read_cmdline_params()
           persistuuid=*|puuid=*) PERSIST_ID=uuid=$value   ;  SET_PERSIST=true    ;;
             persistdev=*|pdev=*) PERSIST_ID=name=$value   ;  SET_PERSIST=true    ;;
 
+                     passphrase) CHANGE_PASSPHRASE=true                          ;;
+                        nocrypt) NO_CRYPT=true                                   ;;
+#-?                          crypt)                             SET_CRYPT=true      ;;
+#-?                        crypt=*) CRYPT_NAME=$value        ;  SET_CRYPT=true      ;;
+#-?   cryptlabel=*|clabel=*|clab=*) CRYPT_ID=label=$value    ;  SET_CRYPT=true      ;;
+#-?            cryptuuid=*|cuuid=*) CRYPT_ID=uuid=$value     ;  SET_CRYPT=true      ;;
+#-?              cryptdev=*|cdev=*) CRYPT_ID=dev=$value      ;  SET_CRYPT=true      ;;
+#-?
                          btry=*) small_int CMD_BOOT_RETRY $param                 ;;
                          ftry=*) small_int CMD_FRUGAL_RETRY $param               ;;
                          ptry=*) small_int CMD_PERSIST_RETRY $param              ;;
@@ -744,6 +760,7 @@ read_cmdline_params()
 
                       confont=*) CON_FONT=$value                                 ;;
                       nomodeset) NO_MODESET=true                                 ;;
+            noumount|noumnt|noU) NO_UMOUNT=true                                  ;;
 
         #----- These get interpreted late but we don't want them to be unknown
                 hwclock=*|hwc=*)  ;;
@@ -944,6 +961,8 @@ read_cmdline_params()
         USER_UID=0
         USER_GID=0
     fi
+
+    test -e /bin/cryptsetup || NO_CRYPT=true
 }
 
 
@@ -1358,6 +1377,20 @@ get_drive() {
     esac
 }
 
+next_partition() {
+    local device=$1  dev=${1##*/}
+    local pre=${device%%$dev}
+    local root  part
+    case $dev in
+        mmcblk*p[1-9]) root=${dev%[1-9]}  ; part=${dev#${root}}  ;;
+          nvme*p[1-9]) root=${dev%[1-9]}  ; part=${dev#${root}}  ;;
+                    *) root=${dev%[0-9]}  ; root=${root%[0-9]}
+                       part=${dev#$root}                         ;;
+    esac
+    part=$((part + 1))
+    echo "$pre$root$part"
+}
+
 #------------------------------------------------------------------------------
 # Function: from_filter <device-list>
 #
@@ -1460,7 +1493,7 @@ find_boot_file() {
 }
 
 #------------------------------------------------------------------------------
-# Function: find_files <files> <mntpnt> <dev> <label> <uuid> <retry>
+# Function: find_files <type> <files> <mntpnt> <device_id> <retry_time>
 #
 # The outer wrapper lets us show the loop times regardless of how we left the
 # main code in _find_files().
@@ -1723,6 +1756,7 @@ _find_files() {
                 fi
                 FOUND_DEV=$dev
                 FOUND_MP=$mntpnt
+                FOUND_FNAME=$fname
                 return 0
             done
             [ "$mounted" ] && mountpoint -q $mp_orig && umount $mp_orig
@@ -1787,7 +1821,7 @@ device_fstype() {
 }
 
 mntpnt_fstype() {
-    local dev=$(df $1 | tail -n1 | cut -d" " -f1)
+    local dev=$(df -P $1 | tail -n1 | cut -d" " -f1)
     device_fstype $dev
 }
 
@@ -1994,12 +2028,61 @@ find_linuxfs_file() {
         SQFILE_PATH=${SQFILE_FILE%/*}
 
         DID_ISO=true
+
     else
-        find_boot_file "$SQFILE_FILE" "$BOOT_MP" "$BOOT_ID" "$BOOT_RETRY" \
-            || linuxfs_error  "$_Could_not_find_X_file_Y_" "$LINUXFS_NAME" "$(fqe \"$SQFILE_FILE\")"
+
+        if [ "$NO_CRYPT" ]; then
+            # Normal path
+            find_boot_file "$SQFILE_FILE" "$BOOT_MP" "$BOOT_ID" "$BOOT_RETRY" \
+                || linuxfs_error  "$_Could_not_find_X_file_Y_" "$LINUXFS_NAME" "$(fqe \"$SQFILE_FILE\")"
+        else
+            # Look for crypt file as well as sqfile_file
+            local boot_dir=$(dirname $SQFILE_FILE)
+            local crypt_full="$boot_dir/$CRYPT_NAME"
+            local files="$crypt_full $SQFILE_FILE"
+            msg  "$_Look_for_files_X_" "<$(fq $files)>"
+
+            find_boot_file "$files" "$BOOT_MP" "$BOOT_ID" "$BOOT_RETRY" \
+                || linuxfs_error  "$_Could_not_find_files_X_or_Y_" "$LINUXFS_NAME" "$(fqe \"$SQFILE_FILE\")" "$(fqe \"$crypt_full\")"
+
+            if [ "$FOUND_FNAME" = "$crypt_full" ] ; then
+                BIOS_UUID=$(device_uuid $FOUND_DEV)
+                BIOS_DEV=$FOUND_DEV
+
+                # Move mounted "bios" device out of the way
+                mkdir -p $BIOS_MP
+                log_cmd mount --move $BOOT_MP $BIOS_MP
+
+                local crypt_dev=$(next_partition $FOUND_DEV)
+                msg  "$_Checking_for_encrypted_partition_on_device_X_" "$crypt_dev"
+
+                test -e $crypt_dev || fatal  "$_Encrypted_device_X_does_not_exist_"        $crypt_dev
+                test -b $crypt_dev || fatal  "$_Encrypted_device_X_is_not_a_block_device_" $crypt_dev
+                cryptsetup isLuks $crypt_dev || fatal  "$_Encrypted_device_X_is_not_a_LUKS_device_" $crypt_dev
+
+                mount -o remount,rw $BIOS_DEV
+
+                local phrase_full=$BIOS_MP/$boot_dir/$PHRASE_FNAME
+                if test -f $phrase_full; then
+                    reset_passphrase $phrase_full $crypt_dev
+                elif [ "$CHANGE_PASSPHRASE" ]; then
+                    change_passphrase $crypt_dev
+                fi
+
+                warn  "$_Found_encrypted_device_You_will_be_asked_to_enter_your_passphrase_below_"
+                cttyhack cryptsetup open --type luks $crypt_dev $CRYPT_MAP || fatal  "$_Could_not_open_LUKS_device_X_" $crypt_dev
+                local mapper_dev=/dev/mapper/$CRYPT_MAP
+                msg  "$_Opened_encrypted_device_X_at_Y_" "$crypt_dev" "$mapper_dev"
+                try_mount "$mapper_dev" "$BOOT_MP" || fatal  "$_Could_not_mount_encrypted_device_"
+                test -e "$BOOT_MP/$SQFILE_FILE" || fatal  "$_Could_not_find_file_X_on_encrypted_partition_" "$SQFILE_FILE"
+                BOOT_FSTYPE=$(mntpnt_fstype $BOOT_MP)
+                ENCRYPTED=true
+                CRYPT_DEV=$mapper_dev
+                FOUND_DEV=$mapper_dev
+            fi
+        fi
 
         SQFILE_MP=$BOOT_MP
-
         SQFILE_DEV=$FOUND_DEV
 
         SQFILE_FULL=$BOOT_MP/$SQFILE_FILE
@@ -2010,6 +2093,65 @@ find_linuxfs_file() {
 
     SQFILE_DIR=$(dirname $SQFILE_FULL)
     DEFAULT_DIR=$SQFILE_DIR
+}
+
+change_passphrase() {
+    local dev=$1
+
+    warn  "$_Changing_encryption_passphrase_"
+
+    local old file=/passphrase
+    while true; do
+        echo -en  "$_Please_enter_current_passphrase_in_clear_text_"
+        read old
+        echo -n "$old" > $file
+        cryptsetup open --type luks --test-passphrase --key-file $file $dev &>/dev/null && break
+
+        warn  "$_The_entered_passphrase_does_not_match_"
+        YES_no  "$_Do_you_want_to_try_again_" && continue
+        warn  "$_Passphrase_change_aborted_"
+        return 3
+    done
+
+    warn  "$_You_will_be_asked_to_enter_the_new_passphrase_twice_"
+    warn  "$_Please_DO_NOT_forget_it_You_will_need_it_every_time_you_boot_"
+    if ! cryptsetup luksChangeKey --key-file $file $dev 2>&1 ; then
+        warn  "$_Passphrase_was_not_changed_"
+        rm $file
+        return 10
+    fi
+    warn  "$_You_will_be_asked_for_the_new_passphrase_a_third_time_"
+    rm $file
+}
+
+reset_passphrase() {
+    local file=$1  dev=$2
+    test -f $file || return
+    local size=$(wc -c $file | cut -d" " -f1)
+
+    msg  "$_Preparing_for_passphrase_first_boot_reset_"
+
+    if [ $size -eq 0 ]; then
+        warn  "$_Reset_aborted_phrase_file_is_empty_"
+        return 1
+    fi
+
+    if ! cryptsetup open --type luks --test-passphrase --key-file $file $dev &>/dev/null; then
+        warn  "$_Reset_aborted_wrong_passphrase_in_phrase_file_"
+        return 2
+    fi
+
+    warn  "$_You_will_be_asked_to_enter_a_new_passphrase_twice_"
+    warn  "$_Please_DO_NOT_forget_it_You_will_need_it_every_time_you_boot_"
+    if ! cryptsetup luksChangeKey --key-file $file $dev 2>&1 ; then
+        warn  "$_Passphrase_was_not_changed_"
+        return 10
+    fi
+    warn  "$_You_will_be_asked_for_the_new_passphrase_a_third_time_"
+    warn
+    mv $file $file.old
+
+    return 0
 }
 
 # FIXME: mention failsafe option or load=all.
@@ -2068,7 +2210,7 @@ mount_linuxfs() {
             || fatal  "$_Could_not_mount_X_as_a_Y_file_" $sqfile_full 'filesystem'
     fi
 
-    LINUXFS_DEV=$(df $sqfile_full | tail -n1 | cut -d" " -f1)
+    LINUXFS_DEV=$(df -P $sqfile_full | tail -n1 | cut -d" " -f1)
 
     SQFS_VID=$(get_vid $vid_file)
 
@@ -3533,9 +3675,9 @@ copy_files() {
     return 0
 }
 
-all_space()      { $LIVE_BIN/df -m "$1" | awk '{size=$2}END{print size}' ;}
-used_space()     { $LIVE_BIN/df -m "$1" | awk '{size=$3}END{print size}' ;}
-avail_space()    { $LIVE_BIN/df -m "$1" | awk '{size=$4}END{print size}' ;}
+all_space()      { $LIVE_BIN/df -Pm "$1" | awk '{size=$2}END{print size}' ;}
+used_space()     { $LIVE_BIN/df -Pm "$1" | awk '{size=$3}END{print size}' ;}
+avail_space()    { $LIVE_BIN/df -Pm "$1" | awk '{size=$4}END{print size}' ;}
 du_size()        { du -scm "$@"         | tail -n1 | cut -f1             ;}
 get_mountpoint() { grep "^$1 " /proc/mounts | cut -d" " -f2              ;}
 
@@ -3544,7 +3686,7 @@ get_mountpoint() { grep "^$1 " /proc/mounts | cut -d" " -f2              ;}
 # compromise that will work well for most people in most situations.
 free_space() {
     local mp=$1
-    local free=$($LIVE_BIN/df -m $mp | awk '{size=$4}END{print size}')
+    local free=$($LIVE_BIN/df -Pm $mp | awk '{size=$4}END{print size}')
     local sparse new_free
     for sparse in $mp/*/rootfs $mp/*/homefs; do
         test -e $sparse || continue
@@ -3563,7 +3705,7 @@ dir_has_param() {
 
     [ -d "$dir" ] || return 1
 
-    local dev=$(df $dir | tail -n1 | cut -d" " -f1)
+    local dev=$(df -P $dir | tail -n1 | cut -d" " -f1)
     local params=$(grep "^$dev " /proc/mounts | cut -d" " -f4)
     case ,$params, in
         *,$want_param,*) return 0;;
@@ -3936,7 +4078,7 @@ _copy_to_ram() {
         format="%s: ${num_co}%12d${m_co} bytes"
         vmsg 1  "$_Size_of_original_X_" $orig_bytes
         vmsg 1  "$_Size_of_copy_X_" $dest_bytes
-        vmsg_nc 1 "$(df -m | grep $toram_mp)"
+        vmsg_nc 1 "$(df -Pm | grep $toram_mp)"
         return 5
     fi
 
@@ -4412,7 +4554,7 @@ copy_persist_to_ram() {
     vmsg 7 "$format" '              Persistence uses' $persist_used
     vmsg 6 "${hi_co}%s"  "Copy persistent root to RAM succeeded"
 
-    DF_ROOTFS=$(df -P -m $ROOTFS_MP | tail -n 1 | sed 's/ \+/ /g')
+    DF_ROOTFS=$(df -Pm $ROOTFS_MP | tail -n 1 | sed 's/ \+/ /g')
     sync
     log_cmd umount $ROOTFS_MP
     return 0
@@ -4817,6 +4959,8 @@ write_output_files() {
 AUFS_MP="$AUFS_MP"
 AUFS_RAM_MP="$AUFS_RAM_MP"
 AUFS_VID_FILE="$AUFS_MP$VID_FILE"
+BIOS_MP="$BIOS_MP"
+BIOS_UUID="$BIOS_UUID"
 BOOT_DEV="$SQFILE_DEV"
 BOOT_FSTYPE="$BOOT_FSTYPE"
 BOOT_MP="$ORIG_SQFILE_MP"
@@ -4828,6 +4972,7 @@ DID_TORAM="$DID_TORAM"
 DISTRO="$DISTRO_NAME"
 DISTRO_CODENAME="$DISTRO_CODENAME"
 DISTRO_VERSION="$DISTRO_VERSION"
+ENCRYPTED="$ENCRYPTED"
 FULL_DISTRO="$DISTRO_NAME-$DISTRO_VERSION"
 INITRD_VERSION="$VERSION"
 INITRD_DATE="$VERSION_DATE"
@@ -4872,6 +5017,7 @@ Initrd_Out
     [ "$DO_DEB"       ]                      && touch $dir/deb-install
     [ "$LOW_COLOR"    ]                      && touch $dir/low-color
     [ "$NO_COLOR"     ]                      && touch $dir/no-color
+    [ "$ENCRYPTED"    ]                      && touch $dir/encrypted
 
     echo "$DISTRO_NAME"                             > $dir/distro
 
@@ -4887,88 +5033,6 @@ Initrd_Out
         full=$BOOT_MP/$f
         test -e $full && cp $full $dir/
     done
-}
-
-old_write_output_files() {
-    local dir=$1
-
-    mkdir -p $dir
-    [ true ] && cat > $dir/linuxrc.out <<Linuxrc_Out
-#$tbar
-#              file: $dir/linuxrc.out
-# auto-generated by: $ME script
-#   sometime around: $(date)
-#$tbar
-AUFS_MP="$AUFS_MP"
-AUFS_RAM_MP="$AUFS_RAM_MP"
-AUFS_VID_FILE="$AUFS_MP$VID_FILE"
-BOOT_DEV="$SQFILE_DEV"
-BOOT_MP="$ORIG_SQFILE_MP"
-BOOT_UUID="$BOOT_UUID"
-DF_ROOTFS="$DF_ROOTFS"
-DID_REMASTER="$DID_REMASTER"
-DID_ROLLBACK="$DID_ROLLBACK"
-DID_TORAM="$DID_TORAM"
-DISTRO="$DISTRO_NAME"
-DISTRO_CODENAME="$DISTRO_CODENAME"
-DISTRO_VERSION="$DISTRO_VERSION"
-FULL_DISTRO="$DISTRO_NAME-$DISTRO_VERSION"
-LINUXRC_VERSION="$VERSION"
-LINUXRC_DATE="$VERSION_DATE"
-PERSISTENCE="$PERSISTENCE"
-PERSIST_DEV="$PERSIST_DEVICE"
-PERSIST_DIR="$PERSIST_FULL_PATH"
-PERSIST_FILE="$PERSIST_ROOT_FULL"
-PERSIST_MP="$PERSIST_MP"
-PERSIST_PATH="$PERSIST_PATH"
-PERSIST_UUID="$PERSIST_UUID"
-REMASTERABLE="$REMASTERABLE"
-ROOTFS_MP="$ROOTFS_MP"
-RW_MODE="$RW_MODE"
-SQFILE_DIR="$ORIG_SQFILE_MP/$ORIG_SQFILE_DIR"
-SQFILE_FULL="$ORIG_SQFILE_MP/$ORIG_SQFILE_FULL"
-SQFILE_NAME="$SQFILE_NAME"
-SQFILE_PATH="$SQFILE_PATH"
-SQFS_MP="$SQFS_MP"
-SQFS_VID_FILE="$SQFS_VID_FILE"
-STATIC_ROOT="$STATIC_ROOT"
-TORAM_MP="$TORAM_MP"
-VID_ERROR="$VID_ERROR"
-VID_FILE="$VID_FILE"
-Linuxrc_Out
-
-    [ "$DID_TORAM" ] && cat > $dir/toram-eject.conf  <<Toram_Out
-BOOT_DEV="$SQFILE_DEV"
-Toram_Out
-
-    [ "$REMASTERABLE" ] && cat > $dir/remaster-live.conf  <<Remaster_Out
-AUFS_MP="$AUFS_MP"
-AUFS_RAM_MP="$AUFS_RAM_MP"
-AUFS_VID_FILE="$AUFS_MP$VID_FILE"
-BOOT_DEV="$SQFILE_DEV"
-BOOT_MP="$ORIG_SQFILE_MP"
-DID_REMASTER="$DID_REMASTER"
-DID_ROLLBACK="$DID_ROLLBACK"
-SQFILE_DIR="$ORIG_SQFILE_MP/$SQFILE_PATH"
-SQFILE_FULL="$ORIG_SQFILE_MP/$SQFILE_PATH/$SQFILE_NAME"
-SQFILE_NAME="$SQFILE_NAME"
-SQFILE_PATH="$SQFILE_PATH"
-SQFS_MP="$SQFS_MP"
-SQFS_VID_FILE="$SQFS_VID_FILE"
-VID_FILE="$VID_FILE"
-Remaster_Out
-
-    [ -n "$PERSIST_ROOT" -a -z "$STATIC_ROOT" ] && cat > $dir/persist-save.conf <<Persist_Out
-AUFS_MP="$AUFS_MP"
-AUFS_RAM_MP="$AUFS_RAM_MP"
-DF_ROOTFS="$DF_ROOTFS"
-PERSIST_DEV="$PERSIST_DEVICE"
-PERSIST_UUID="$PERSIST_UUID"
-PERSIST_FILE="$PERSIST_ROOT_FULL"
-PERSIST_MP="$PERSIST_MP"
-ROOTFS_MP="$ROOTFS_MP"
-SQFS_MP="$SQFS_MP"
-Persist_Out
 }
 
 update_store_file() {
@@ -5070,12 +5134,15 @@ detect_old_persist_scripts() {
 
 late_umount() {
     local dev=$1
-    [ "$dev" ] || return
+
+    [ "$dev" ]       || return
+    [ "$NO_UMOUNT" ] && return
 
     ## It does not suffice to only disable the liveCD (see below)
     #[ "$TO_RAM_EJECT" ] || return
 
     local dep
+    # Don't umount these devcies because they are actively used
     for dep in $HOMEFS_DEV $ROOTFS_DEV $LINUXFS_DEV; do
         [ "$dep" = "$dev" ] && return
     done
@@ -5083,20 +5150,22 @@ late_umount() {
     # Don't umount if not mounted
     cut -d" " -f1 /proc/mounts | grep -q "^$dev$" || return
 
-    # if [ -z "$TO_RAM_EJECT" ]; then
-    #     case $(stat -c %t $dev) in
-    #         b) msg 'Will not late umount cd/dvd device %s' $(pq $dev)
-    #            return ;;
-    #     esac
-    # fi
-
     msg  "$_umount_X_" $(pq $dev)
+    local success
     for i in $(seq 1 5); do
         log_cmd umount $dev 2>/dev/null
-        cut -d" " -f1 /proc/mounts | grep -q "^$dev$" || return
-        usleep 500000
+        if cut -d" " -f1 /proc/mounts | grep -q "^$dev$"; then
+            usleep 500000
+            continue
+        fi
+        success=true
+        break
     done
-    err  "$_umount_of_X_failed_" $(pqe $dev)
+    [ "$success" ] || err  "$_umount_of_X_failed_" $(pqe $dev)
+
+    # If this was the encrypted device then close the mapping
+    [ "$dev" = "$CRYPT_DEV" ] || return
+    log_cmd chroot /live/aufs /sbin/cryptsetup close "$CRYPT_MAP"
 }
 
 write_ntfs_pids() {
