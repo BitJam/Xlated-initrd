@@ -1,0 +1,5 @@
+   1)  Predvolené
+   2)  automount       Automaticky pripájať zariadenia po ich pripojení
+   3)  mount=usb       ... a pripojiť všetky USB zariadenia pri štarte
+   4)  mount=all       ... a pripojiť všetky zariadenia pri štarte
+   5)  mount=off       Zakázať všetky extra a automatické pripájania

@@ -3,7 +3,7 @@
    3)  checkfs         Check LiveUSB and persistence ext2/3/4 file systems
    4)  toram           Sıkıştırılmış dosya sistemi RAM'a kopyalanıyor
    5)  from=usb        LiveUSB'den yükleme bitti
-   6)  from=hd         Finish booting from a hard drive
+   6)  from=hd         Sabit sürücüden önyükleme bitti
    7)  nousb2          Disable all usb-2 devices while booting
    8)  hwclock=ask     Have the system help determine the clock setting
    9)  hwclock=utc     Hardware clock uses UTC (Linux-only systems)
