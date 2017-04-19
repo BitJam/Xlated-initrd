@@ -70,6 +70,7 @@ _Only_one_option_can_be_selected_="Μόνο μία επιλογή μπορεί �
 _Options_="Επιλογές"
 _Partitions_that_cant_be_used_are_listed_but_not_selectable_="Χωρίσματα που δεν μπορούν να χρησιμοποιηθούν περιλαμβάνονται, αλλά δεν είναι επιλέξιμο."
 _Please_contact_X_at_Y_="Παρακαλείστε να επικοινωνήσετε με το %s στο %s"
+_Please_enter_current_passphrase_in_clear_text_="Please enter current passphrase (in clear text)\n>"
 _Please_select_X_device_="Παρακαλώ επιλέξτε τη συσκευή %s:"
 _Please_select_size_of_X_file_="Παρακαλώ επιλέξτε το μέγεθος του αρχείου %s"
 _Please_try_again_="Παρακαλώ προσπαθήστε ξανά"
