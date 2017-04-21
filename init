@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.00.03"
-           VERSION_DATE="Tue Apr 18 23:16:35 MDT 2017"
+                VERSION="8.00.04"
+           VERSION_DATE="Thu Apr 20 19:40:52 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -2053,7 +2053,17 @@ find_linuxfs_file() {
                 mkdir -p $BIOS_MP
                 log_cmd mount --move $BOOT_MP $BIOS_MP
 
-                local crypt_dev=$(next_partition $FOUND_DEV)
+                local crypt_dev  crypt_file=$BIOS_MP/${crypt_full#/}
+                CRYPT_UUID=$(cat $crypt_file 2>/dev/null)
+
+                [ -n "$CRYPT_UUID" ] && crypt_dev=$(blkid | grep 'UUID="'$CRYPT_UUID'"' | cut -d: -f1)
+
+                vmsg 7 "crypt_uuid:$CRYPT_UUID   crypt_dev:$crypt_dev"
+
+                [ -z "$crypt_dev" ] && crypt_dev=$(next_partition $FOUND_DEV)
+                [ -z "$CRYPT_UUID" ] && CRYPT_UUID=$(device_uuid $crypt_dev)
+                BOOT_UUID=$CRYPT_UUID
+
                 msg  "$_Checking_for_encrypted_partition_on_device_X_" "$crypt_dev"
 
                 test -e $crypt_dev || fatal  "$_Encrypted_device_X_does_not_exist_"        $crypt_dev
@@ -4965,6 +4975,7 @@ BOOT_DEV="$SQFILE_DEV"
 BOOT_FSTYPE="$BOOT_FSTYPE"
 BOOT_MP="$ORIG_SQFILE_MP"
 BOOT_UUID="$BOOT_UUID"
+CRYPT_UUID="$CRYPT_UUID"
 DF_ROOTFS="$DF_ROOTFS"
 DID_REMASTER="$DID_REMASTER"
 DID_ROLLBACK="$DID_ROLLBACK"
