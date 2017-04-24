@@ -164,7 +164,6 @@ _You_will_be_asked_for_the_new_passphrase_a_third_time_="You will be asked for t
 _You_will_be_asked_to_enter_a_new_passphrase_twice_="You will be asked to enter a new passphrase twice"
 _You_will_be_asked_to_enter_the_new_passphrase_twice_="You will be asked to enter the new passphrase twice"
 _automount_mount_="automount|mount=*"
-_boot_device_="boot device"
 _check_X_filesystem_="check %s filesystem"
 _continue_="continue"
 _copy_X_file_to_RAM_="copy %s file to RAM"
