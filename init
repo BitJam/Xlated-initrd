@@ -2,7 +2,7 @@
 
 #==============================================================================
 # LiveCD/USB/HD init script
-# (C) 2009-2016 Paul Banham <antiX@operamail.com>
+# (C) 2009-2017 Paul Banham <antiX@operamail.com>
 # Inspired by the work of Klaus Knopper
 #
 # License: GPLv3 or later
@@ -86,8 +86,8 @@
 
           VID_NAME=VID
       LINUXFS_NAME=linuxfs
-        CRYPT_NAME=crypt
-         CRYPT_MAP=live
+       CRYPT_FNAME=crypt
+         LUKS_NAME=liveb
       PHRASE_FNAME=.passphrase
 
         BLACK_LIST=
@@ -378,7 +378,7 @@ main_core() {
     # will always work
     #[ "$NO_EHCI" ] && disable_hcd ehci
 
-    #[ "$SET_CRYPT" -a -z "$NO_CRYPT" ] && setup_crypt "$CRYPT_ID" "$BOOT_DIR/$CRYPT_NAME" "$BOOT_MP"
+    #[ "$SET_CRYPT" -a -z "$NO_CRYPT" ] && setup_crypt "$CRYPT_ID" "$BOOT_DIR/$CRYPT_FNAME" "$BOOT_MP"
 
     breakpoint 3 "before looking for linuxfs file"
 
@@ -668,7 +668,7 @@ read_cmdline_params()
                      passphrase) CHANGE_PASSPHRASE=true                          ;;
                         nocrypt) NO_CRYPT=true                                   ;;
 #-?                          crypt)                             SET_CRYPT=true      ;;
-#-?                        crypt=*) CRYPT_NAME=$value        ;  SET_CRYPT=true      ;;
+#-?                        crypt=*) CRYPT_FNAME=$value        ;  SET_CRYPT=true      ;;
 #-?   cryptlabel=*|clabel=*|clab=*) CRYPT_ID=label=$value    ;  SET_CRYPT=true      ;;
 #-?            cryptuuid=*|cuuid=*) CRYPT_ID=uuid=$value     ;  SET_CRYPT=true      ;;
 #-?              cryptdev=*|cdev=*) CRYPT_ID=dev=$value      ;  SET_CRYPT=true      ;;
@@ -2052,7 +2052,7 @@ find_linuxfs_file() {
         else
             # Look for crypt file as well as sqfile_file
             local boot_dir=$(dirname $SQFILE_FILE)
-            local crypt_full="$boot_dir/$CRYPT_NAME"
+            local crypt_full="$boot_dir/$CRYPT_FNAME"
             local files="$crypt_full $SQFILE_FILE"
             msg  "$_Look_for_files_X_" "<$(fq $files)>"
 
@@ -2094,8 +2094,8 @@ find_linuxfs_file() {
                 fi
 
                 warn  "$_Found_encrypted_device_You_will_be_asked_to_enter_your_passphrase_below_"
-                cttyhack cryptsetup open --type luks $crypt_dev $CRYPT_MAP || fatal  "$_Could_not_open_LUKS_device_X_" $crypt_dev
-                local mapper_dev=/dev/mapper/$CRYPT_MAP
+                cttyhack cryptsetup open --type luks $crypt_dev $LUKS_NAME || fatal  "$_Could_not_open_LUKS_device_X_" $crypt_dev
+                local mapper_dev=/dev/mapper/$LUKS_NAME
                 msg  "$_Opened_encrypted_device_X_at_Y_" "$crypt_dev" "$mapper_dev"
                 try_mount "$mapper_dev" "$BOOT_MP" || fatal  "$_Could_not_mount_encrypted_device_"
                 test -e "$BOOT_MP/$SQFILE_FILE" || fatal  "$_Could_not_find_file_X_on_encrypted_partition_" "$SQFILE_FILE"
@@ -5191,7 +5191,7 @@ late_umount() {
 
     # If this was the encrypted device then close the mapping
     [ "$dev" = "$CRYPT_DEV" ] || return
-    log_cmd chroot /live/aufs /sbin/cryptsetup close "$CRYPT_MAP"
+    log_cmd chroot /live/aufs /sbin/cryptsetup close "$LUKS_NAME"
 }
 
 write_ntfs_pids() {
