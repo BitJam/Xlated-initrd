@@ -2,7 +2,7 @@
 
 #==============================================================================
 # LiveCD/USB/HD init script
-# (C) 2009-2016 Paul Banham <antiX@operamail.com>
+# (C) 2009-2017 Paul Banham <antiX@operamail.com>
 # Inspired by the work of Klaus Knopper
 #
 # License: GPLv3 or later
@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.00.06"
-           VERSION_DATE="Mon Apr 24 21:39:24 MDT 2017"
+                VERSION="8.00.07"
+           VERSION_DATE="Thu Apr 27 18:53:53 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -86,8 +86,8 @@
 
           VID_NAME=VID
       LINUXFS_NAME=linuxfs
-        CRYPT_NAME=crypt
-         CRYPT_MAP=live
+       CRYPT_FNAME=crypt
+         LUKS_NAME=liveb
       PHRASE_FNAME=.passphrase
 
         BLACK_LIST=
@@ -378,7 +378,7 @@ main_core() {
     # will always work
     #[ "$NO_EHCI" ] && disable_hcd ehci
 
-    #[ "$SET_CRYPT" -a -z "$NO_CRYPT" ] && setup_crypt "$CRYPT_ID" "$BOOT_DIR/$CRYPT_NAME" "$BOOT_MP"
+    #[ "$SET_CRYPT" -a -z "$NO_CRYPT" ] && setup_crypt "$CRYPT_ID" "$BOOT_DIR/$CRYPT_FNAME" "$BOOT_MP"
 
     breakpoint 3 "before looking for linuxfs file"
 
@@ -448,7 +448,10 @@ main_core() {
 
     # Check md5 of files in directory containing linuxfs file
     # 'fromiso' causes us to check md5sums in two places
-    [ "$CHECK_MD5" ] && check_md5 $SQFILE_DIR
+    if [ "$CHECK_MD5" ]; then
+        check_md5 $SQFILE_DIR
+        [ "$ENCRYPTED" ] && check_md5 $BIOS_MP/$(dirname $SQFILE_FILE)
+    fi
 
     [ "$TO_RAM" ] && copy_to_ram "$SQFILE_FULL" $TORAM_MP
 
@@ -665,7 +668,7 @@ read_cmdline_params()
                      passphrase) CHANGE_PASSPHRASE=true                          ;;
                         nocrypt) NO_CRYPT=true                                   ;;
 #-?                          crypt)                             SET_CRYPT=true      ;;
-#-?                        crypt=*) CRYPT_NAME=$value        ;  SET_CRYPT=true      ;;
+#-?                        crypt=*) CRYPT_FNAME=$value        ;  SET_CRYPT=true      ;;
 #-?   cryptlabel=*|clabel=*|clab=*) CRYPT_ID=label=$value    ;  SET_CRYPT=true      ;;
 #-?            cryptuuid=*|cuuid=*) CRYPT_ID=uuid=$value     ;  SET_CRYPT=true      ;;
 #-?              cryptdev=*|cdev=*) CRYPT_ID=dev=$value      ;  SET_CRYPT=true      ;;
@@ -2049,7 +2052,7 @@ find_linuxfs_file() {
         else
             # Look for crypt file as well as sqfile_file
             local boot_dir=$(dirname $SQFILE_FILE)
-            local crypt_full="$boot_dir/$CRYPT_NAME"
+            local crypt_full="$boot_dir/$CRYPT_FNAME"
             local files="$crypt_full $SQFILE_FILE"
             msg  "$_Look_for_files_X_" "<$(fq $files)>"
 
@@ -2091,8 +2094,8 @@ find_linuxfs_file() {
                 fi
 
                 warn  "$_Found_encrypted_device_You_will_be_asked_to_enter_your_passphrase_below_"
-                cttyhack cryptsetup open --type luks $crypt_dev $CRYPT_MAP || fatal  "$_Could_not_open_LUKS_device_X_" $crypt_dev
-                local mapper_dev=/dev/mapper/$CRYPT_MAP
+                cttyhack cryptsetup open --type luks $crypt_dev $LUKS_NAME || fatal  "$_Could_not_open_LUKS_device_X_" $crypt_dev
+                local mapper_dev=/dev/mapper/$LUKS_NAME
                 msg  "$_Opened_encrypted_device_X_at_Y_" "$crypt_dev" "$mapper_dev"
                 try_mount "$mapper_dev" "$BOOT_MP" || fatal  "$_Could_not_mount_encrypted_device_"
                 test -e "$BOOT_MP/$SQFILE_FILE" || fatal  "$_Could_not_find_file_X_on_encrypted_partition_" "$SQFILE_FILE"
@@ -4997,16 +5000,16 @@ DISTRO_CODENAME="$DISTRO_CODENAME"
 DISTRO_VERSION="$DISTRO_VERSION"
 ENCRYPTED="$ENCRYPTED"
 FULL_DISTRO="$DISTRO_NAME-$DISTRO_VERSION"
-INITRD_VERSION="$VERSION"
 INITRD_DATE="$VERSION_DATE"
+INITRD_VERSION="$VERSION"
 LIVE_DIR="$FINAL_DIR"
 PERSISTENCE="$PERSISTENCE"
 PERSIST_DEV="$PERSIST_DEVICE"
-PERSIST_UUID="$PERSIST_UUID"
 PERSIST_DIR="$PERSIST_FULL_PATH"
 PERSIST_FILE="$PERSIST_ROOT_FULL"
 PERSIST_MP="$PERSIST_MP"
 PERSIST_PATH="$PERSIST_PATH"
+PERSIST_UUID="$PERSIST_UUID"
 REMASTERABLE="$REMASTERABLE"
 ROOTFS_MP="$ROOTFS_MP"
 RW_MODE="$RW_MODE"
@@ -5018,8 +5021,8 @@ SQFS_MP="$SQFS_MP"
 SQFS_VID_FILE="$SQFS_VID_FILE"
 STATIC_ROOT="$STATIC_ROOT"
 TORAM_MP="$TORAM_MP"
-USER_UID="$USER_UID"
 USER_GID="$USER_GID"
+USER_UID="$USER_UID"
 VID_ERROR="$VID_ERROR"
 VID_FILE="$VID_FILE"
 Initrd_Out
@@ -5188,7 +5191,7 @@ late_umount() {
 
     # If this was the encrypted device then close the mapping
     [ "$dev" = "$CRYPT_DEV" ] || return
-    log_cmd chroot /live/aufs /sbin/cryptsetup close "$CRYPT_MAP"
+    log_cmd chroot /live/aufs /sbin/cryptsetup close "$LUKS_NAME"
 }
 
 write_ntfs_pids() {
