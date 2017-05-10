@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.00.16"
-           VERSION_DATE="Tue May  9 05:14:04 MDT 2017"
+                VERSION="8.00.17"
+           VERSION_DATE="Wed May 10 14:38:11 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -115,6 +115,7 @@ MKFS_FREE_MARGIN=10
           LAZYTIME=""
       MADE_BY_FILE="made-by-live-usb-maker"
     PROG_BAR_WIDTH=100
+   MIN_SCREEN_WIDTH=80
 
     #           HUP INT QUIT SEGV TERM
     SIGNAL_LIST="1   2   3    11   15"
@@ -763,7 +764,7 @@ read_cmdline_params()
 
                          noprog) NO_PROGRESS=true                                ;;
 
-                      confont=*) CON_FONT=$value                                 ;;
+                      confont=*) small_int CON_FONT $param                       ;;
                       nomodeset) NO_MODESET=true                                 ;;
             noumount|noumnt|noU) NO_UMOUNT=true                                  ;;
 
@@ -974,7 +975,6 @@ read_cmdline_params()
     fi
 }
 
-
 small_int() {
     local var=$1 val=${2#*=} name=${2%%=*} param=$2
 
@@ -1116,22 +1116,35 @@ read_xlat() {
 #
 #------------------------------------------------------------------------------
 set_console_font() {
-    local lang=$1  cmd_size=$2  dir=${3:-$LOCALE_DIR/fonts}
-    msg "set_console_font($lang,  $cmd_size,  $dir)"
+    local lang=$1  cmd_size=${2:-8}  dir=${3:-$LOCALE_DIR/fonts}
+    local def_size=8  name=Terminus  ext=.psf
+    #msg "set_console_font($lang,  $cmd_size,  $dir)"
 
-    local def_size=16  name=Terminus  ext=.psf
+    # This only makes sense on a framebuffer
+    test -e /dev/fb0 || return
 
-        local size size2
-        case $cmd_size in
-          [123456789]) size=8     ; size2=12x6  ;;
-              1[0123]) size=12x6                ;;
-                1[45]) size=14                  ;;
-               1[678]) size=16                  ;;
-             19|2[01]) size=20x10               ;;
-                2[23]) size=22x11               ;;
-               2[456]) size=24x12               ;;
-            2[789]|30) size=28x14               ;;
-           [3-9][0-9]) size=32x16               ;;
+    # Make sure we have at least 80 chars per line
+    local pixel_width=$(get_fbcondecor_width) min_width=${MIN_SCREEN_WIDTH:-80}
+    #msg "$pixel_width / $min_width"
+    local max_size=$((pixel_width / min_width))
+    vmsg 8 "max font size: $max_size"
+
+    if [ $cmd_size -gt $max_size ]; then
+        warn  "$_The_console_font_size_X_is_too_large_" $cmd_size
+        warn  "$_Reducing_console_font_size_to_X_" $max_size
+        cmd_size=$max_size
+    fi
+
+    local size
+    case $cmd_size in
+              [1-7]) size=12x6                ;;
+               [89]) size=16                  ;;
+                 10) size=20x10               ;;
+                 11) size=22x11               ;;
+              1[23]) size=24x12               ;;
+              1[45]) size=28x14               ;;
+            1[6789]) size=32x16               ;;
+       [23456][0-9]) size=32x16               ;;
     esac
 
     local code
@@ -1148,7 +1161,7 @@ set_console_font() {
     esac
 
     local try font f_size f_face file
-    for f_size in $size $size2 $def_size; do
+    for f_size in $size $def_size; do
         for f_face in ${name}Bold VGA $name; do
             try=$code-$f_face$f_size
             file=$dir/$try$ext
@@ -1162,9 +1175,12 @@ set_console_font() {
     [ "$font" ] || return 2
 
     [ "$NO_CLEAR" ] || clear
-    vmsg 7  "$_Set_font_to_X_" "$(pq $font)"
+    vmsg 5  "$_Set_font_to_X_" "$(pq $font)"
 
     log_cmd setfont $file -C $(tty)
+
+    SCREEN_WIDTH=$(stty size 2>/dev/null | cut -d" " -f2)
+    vmsg 7 "New screen width: $SCREEN_WIDTH"
 
     echo $font   > $OUTPUT_DIR/font
     echo $f_size > $OUTPUT_DIR/font-size
@@ -1296,6 +1312,35 @@ disable_hcd() {
         [ -e $kmsg ] && echo "initrd disabled $type: $symlink" >> $kmsg
         echo $symlink > $dir/unbind
     done
+}
+
+get_fbcondecor_width() {
+    local theme=${1:-default}  res
+    local fbsize_file=/sys/class/graphics/fb0/virtual_size
+    read res 2>/dev/null <$fbsize_file
+    [ -z "$res" ] && return
+    if test -e /dev/fbcondecor; then
+        local file=/etc/splash/$theme/${res/,/x}.cfg
+        test -r $file || return
+        sed -rn "s/^\s*tw=([0-9]+).*/\1/p" $file | tail -n1
+    else
+        cut -d, -f1 $fbsize_file
+    fi
+}
+
+get_fbcondecor_theme() {
+
+    local boot_param=${1:-$SPLASH_PARAM}
+    local param theme
+    for param in ${boot_param//,/ }; do
+        case $param in
+          t=*|theme=*) theme=${param#*=} ;;
+        esac
+    done
+    test -d /etc/$theme/ || theme=default
+    test -d /etc/$theme/ || return 1
+    echo $theme
+    return 0
 }
 
 set_fbcondecor() {
@@ -3250,7 +3295,6 @@ do_early_menus() {
     local lang time_zone option persist desktop
     local cmdline
     my_select_menu  "$_Select_Language_"            "$_Languages_are_listed_alphabetically_"   l lang      "$_Language_"           'lang=*'
-    msg "lang: $MENU_VALUE"
 
     local need_font
     case $MENU_VALUE in
@@ -3259,8 +3303,7 @@ do_early_menus() {
                 read_xlat init $LANG       ;;
     esac
 
-    my_select_menu  "$_Select_Console_Font_size_"   "$_The_default_size_is_16_"                c confont   "$_Console_font_size_"  'confont=*'
-    msg "confont: $MENU_VALUE"
+    my_select_menu  "$_Select_Console_Font_size_"   "$_The_default_size_is_8_"                c confont   "$_Console_font_size_"  'confont=*'
 
     case $MENU_VALUE in
         confont=*) CON_FONT=${MENU_VALUE#confont=}
