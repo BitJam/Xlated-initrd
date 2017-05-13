@@ -56,6 +56,7 @@ _Found_encrypted_device_You_will_be_asked_to_enter_your_passphrase_below_="Found
 _Found_existing_X_install_="Found existing %s install"
 _Found_new_device_s_X_="Found new device(s) %s"
 _Give_X_the_label_Y_="Give %s the label %s?"
+_Invalid_X_value_Y_="Invalid %s value %s"
 _Keeping_default_X_="Keeping default %s"
 _Kernel_version_X_="Kernel version %s"
 _Kernel_version_mismatch_="Kernel version mismatch"
