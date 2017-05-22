@@ -21,6 +21,7 @@ MSTATE_FILES="# File: machine-state-files
 /etc/modules
 /etc/udev/rules.d/*-persistent-net.rules
 # /etc/X11/xorg.conf
+/sys/class/backlight/*/brightness
 /var/lib/alsa/asound.state"
 
 GSTATE_FILES="# File: general-state-files
@@ -66,14 +67,15 @@ load_translation
 
 main() {
     case $1 in
-        start) do_start   ;;
-         stop) do_stop    ;;
-            *) echo "Usage: $0 {start|stop}" ;;
+        start|sys) do_start $1 ;;
+             stop) do_stop     ;;
+                *) echo "Usage: $0 {start|stop|sys}" ;;
     esac
     exit 0
 }
 
 do_start() {
+    local cmd=${1:-start}
 
     test -e /live/config/remasterable || exit 0
     read_cmdline
@@ -93,8 +95,10 @@ do_start() {
     #. Like saving the state of a game.
     echo_script "$_Restore_state_information_" $0
 
+    local file_list=$(state_files "$MSTATE_FILES")
+
     # Always restore machine specific state files
-    restore_state $root_dir/$MSTATE_DIR "$(state_files "$MSTATE_FILES")" $(mach_id)
+    restore_state $root_dir/$MSTATE_DIR "$(state_files "$file_list")" "$(mach_id)" $cmd
 
     # Only restore general state files and user files if root persistence is not
     # enabled
@@ -102,7 +106,8 @@ do_start() {
     # We'll see.  Maybe just restore it the first time?!
     #test -e /live/config/persist-root && return
 
-    restore_state $root_dir/$GSTATE_DIR "$(state_files "$GSTATE_FILES")"
+    file_list=$(state_files "$GSTATE_FILES" | sed "s|^\s*/||")
+    restore_state $root_dir/$GSTATE_DIR "$file_list" "" $cmd
 
     [ "$PERSISTENCE" ] && return
 
@@ -224,8 +229,8 @@ dummy() {
 
 save_state() {
     #. "general" (same on all machines) versus "machine specific"
-    local state_dir="$1"  files="$2"  dir2="$3"  type="$(wq "$_general_")"
-    local to_delete  del_file=$state_dir/to-delete
+    local state_dir="$1"  file_list="$2"  dir2="$3"  type="$(wq "$_general_")"
+    #local to_delete  del_file=$state_dir/to-delete
 
     test -e $state_dir/no-state && return
 
@@ -260,7 +265,7 @@ save_state() {
     done
 
     # Save system files under state_dir
-    for file in $files; do
+    for file in $file_list; do
 
         # Don't save from /live
         [ -z "${file##/live/*}" ] && continue
@@ -297,29 +302,38 @@ save_state() {
     done
 
     # Save list of files to delete when we restore state
-    [ ${#to_delete} -gt 0 ] && echo -e "$to_delete" > $del_file
+    #[ ${#to_delete} -gt 0 ] && echo -e "$to_delete" > $del_file
 }
 
 restore_state() {
-    local state_dir="$1"  files="$2"  dir2="$3" type="$(wq "$_general_")"
+    local state_dir="$1"  file_list="$2"  dir2="$3" cmd=${4:-start} type="$(wq "$_general_")"
     [ ${#dir2} -gt 0 ] && type=$(wq "$_machine_specific_")
+
+    case $cmd in
+        sys) file_list=$(echo "$file_list" | grep    ^/sys/) ;;
+          *) file_list=$(echo "$file_list" | grep -v ^/sys/) ;;
+    esac
+
+    file_list=$(echo "$file_list" | sed "s|^\s*/||")
 
     test -e $state_dir/no-state && return
 
-    local del_file=$state_dir/to-delete
-    delete_files $del_file $type
-    rm -f $del_file
+    #local del_file=$state_dir/to-delete
+    #delete_files $del_file $type
+    #rm -f $del_file
 
     # dir2 is typically/only a machine-id
     state_dir=$state_dir${dir2:+/$dir2}
     local perm_file=$state_dir/permissions
 
-    if test -e $state_dir; then
+    if test -e $state_dir/files; then
         # Copy saved state files to system
-        for from in $(find $state_dir/files -type f 2>/dev/null); do
+        #for from in $(find $state_dir/files -type f 2>/dev/null); do
+        while read from; do
+            from=$state_dir/files/$from
             local to=${from#$state_dir/files}
 
-            # Don't write to /live
+            # Don't write to /live or /sys
             [ -z "${to##/live/*}" ] && continue
 
             should_copy $from $to || continue
@@ -334,7 +348,10 @@ restore_state() {
             local perm=$(grep "^$to:" $perm_file 2>/dev/null | cut -d: -f2)
             : ${perm:=644}
             [ "$perm" != "$(stat -c %a $to)" ] && echo_cmd chmod $perm $to
-        done
+        done <<Restore_Files
+$(cd "$state_dir/files" && eval "ls -d $(echo $file_list)" 2>/dev/null)
+Restore_Files
+
     else
         [ "$dir2" ] || return
         for file in $MSTATE_FILES; do
@@ -350,6 +367,7 @@ restore_state() {
             #    echo_cmd rm -f $file
             #fi
         done
+
     fi
 }
 
