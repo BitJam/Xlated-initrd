@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.00.27"
-           VERSION_DATE="Mon May 22 23:52:47 MDT 2017"
+                VERSION="8.00.28"
+           VERSION_DATE="Tue May 23 18:38:56 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -1219,6 +1219,10 @@ do_welcome() {
             imsg  "$_For_command_line_install_login_as_X_password_Y_" "$(gq root)" "$(gq root)"
             imsg  "$_Enter_the_command_X_Follow_the_instructions_" "$(gq $CLI_INSTALLER)"
         fi
+        if [ -n "$CLI_CC" ]; then
+            imsg  "$_Use_the_command_X_for_easy_access_to_many_commands_" "$(gq $CLI_CC)"
+        fi
+
     ) > /issue
 
     if lspci -n | grep -iq " 80ee:beef"; then
