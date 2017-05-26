@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.00.28"
-           VERSION_DATE="Tue May 23 18:38:56 MDT 2017"
+                VERSION="8.00.29"
+           VERSION_DATE="Thu May 25 17:36:25 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -501,8 +501,6 @@ main_core() {
         local delta=$(get_seconds $((plus_t2 - plus_t1)))
         vmsg 8 "$green@${cyan} Extras took$hi_co $delta${cyan} seconds"
     fi
-
-    [ ! -e /$NEW_ROOT/etc/issue -o -n "$FORCE_ISSUE" ] && cp /issue $NEW_ROOT/etc/issue
 
     # FIXME: do this after copy_xtra for easy testing (for now) (????)
     PROC_CMDLINE=$(cat /live/config/proc-cmdline)
@@ -1211,19 +1209,10 @@ do_welcome() {
         *[pP][aA][eE]) arch="$arch pae" ;;
     esac
 
-    vmsg 2  "$_Welcome_to_X_" "$(pq $pretty_name$arch)!"
+    pretty_name="$pretty_name$arch"
+    vmsg 2  "$_Welcome_to_X_" "$(pq $pretty_name)!"
 
-    (   imsg  "$_Welcome_to_X_Powered_by_Y_" "$(gq $pretty_name$arch)" "$(gq Debian)."
-        if [ -n "$CLI_INSTALLER" ]; then
-            echo
-            imsg  "$_For_command_line_install_login_as_X_password_Y_" "$(gq root)" "$(gq root)"
-            imsg  "$_Enter_the_command_X_Follow_the_instructions_" "$(gq $CLI_INSTALLER)"
-        fi
-        if [ -n "$CLI_CC" ]; then
-            imsg  "$_Use_the_command_X_for_easy_access_to_many_commands_" "$(gq $CLI_CC)"
-        fi
-
-    ) > /issue
+    echo "$pretty_name" > /live/config/pretty-name
 
     if lspci -n | grep -iq " 80ee:beef"; then
         vmsg 7 'VirtualBox detected'
@@ -2832,13 +2821,6 @@ pqh()    { echo "$m_co$*$hi_co"           ;}
 hq()     { echo "$hi_co$*$m_co"           ;}
 ncq()    { echo "$hi_co$*$nc_co"          ;}
 gq()     { echo "$hi_co$*$lt_green"       ;}
-
-
-imsg() {
-    local fmt=$1
-    shift
-    printf "$lt_green$fmt$nc_co\n" "$@"
-}
 
 vmsg() {
     local level=$1  fmt=$2
