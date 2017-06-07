@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.00.29"
-           VERSION_DATE="Thu May 25 17:36:25 MDT 2017"
+                VERSION="8.00.32"
+           VERSION_DATE="Tue Jun  6 23:27:43 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -36,7 +36,8 @@
           PERSIST_RETRY=10
     FAILSAFE_BOOT_RETRY=30
 
-    DISABLE_SERVICES_OPTS="(c[0-9]+(\.[0-9]*)?|c\.[0-9]+|[DLMPSXacdgklmnNrsvwx])+"
+    #DISABLE_SERVICES_OPTS="(c[0-9]+(\.[0-9]*)?|c\.[0-9]+|[ADLMPSWXacdgklmnNrsvwx])+"
+    DISABLE_SERVICES_OPTS="[ADLMPSWXacdgklmnNrsvwx]+"
 
            RW_MODE="ro"
        #DISTRO_NAME="Linux"
@@ -1141,8 +1142,9 @@ set_console_width() {
     local pixel_width=$(get_fbcondecor_width)
     local cmd_size=$((pixel_width / width))
 
-    vmsg 5  "$_Try_to_set_line_length_to_X_" "$(pq $width)"
-    vmsg 5  "$_Using_size_X_" "$(pq $cmd_size)"
+    vmsg 6 'Width of screen in pixels %s'  "$(pq $pixel_width)"
+    vmsg 6 'Try to set line length to %s'  "$(pq $width)"
+    vmsg 6 'Using size %s'                 "$(pq $cmd_size)"
 
     local size
     case $cmd_size in
@@ -1189,7 +1191,7 @@ set_console_width() {
     log_cmd setfont $file -C $(tty)
 
     SCREEN_WIDTH=$(stty size 2>/dev/null | cut -d" " -f2)
-    vmsg 7 "New screen width: $SCREEN_WIDTH"
+    vmsg 7  "$_New_screen_width_X_"  "$(pq $SCREEN_WIDTH)"
 }
 
 #------------------------------------------------------------------------------
@@ -3167,10 +3169,10 @@ initialize_cmdline2() {
         [ -z "${DISABLE_SERVICES##*s*}" ] && cmdline="$cmdline${cmdline:+ }nosavestate"
         [ -z "${DISABLE_SERVICES##*r*}" ] && cmdline="$cmdline${cmdline:+ }norepo"
         [ -z "${DISABLE_SERVICES##*k*}" ] && cmdline="$cmdline${cmdline:+ }noloadkeys"
-        if [ -z "${DISABLE_SERVICES##*c*}" ]; then
-            local desk_delay=$(echo $DISABLE_SERVICES | sed -r 's/[^c]*c([0-9]+(\.[0-9]*)?|\.[0-9]+|).*/\1/')
-            cmdline="$cmdline${cmdline:+ }deskdelay=${desk_delay:-0}"
-        fi
+        # if [ -z "${DISABLE_SERVICES##*c*}" ]; then
+        #     local desk_delay=$(echo $DISABLE_SERVICES | sed -r 's/[^c]*c([0-9]+(\.[0-9]*)?|\.[0-9]+|).*/\1/')
+        #     cmdline="$cmdline${cmdline:+ }deskdelay=${desk_delay:-0}"
+        # fi
         [ "$cmdline" ] && echo "$cmdline" >> /live/config/cmdline2
     fi
 }
