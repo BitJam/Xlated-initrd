@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.00.33"
-           VERSION_DATE="Sun Jun 11 02:12:43 MDT 2017"
+                VERSION="8.00.34"
+           VERSION_DATE="Sat Jun 17 16:09:04 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -37,7 +37,7 @@
     FAILSAFE_BOOT_RETRY=30
 
     #DISABLE_SERVICES_OPTS="(c[0-9]+(\.[0-9]*)?|c\.[0-9]+|[ADLMPSWXacdgklmnNrsvwx])+"
-    DISABLE_SERVICES_OPTS="[ADLMPSWXacdgklmnNrsvwx]+"
+    DISABLE_SERVICES_OPTS="[aAdgklmnNPrsSvwWx]+"
 
            RW_MODE="ro"
        #DISTRO_NAME="Linux"
@@ -2221,6 +2221,12 @@ find_crypt_or_linuxfs() {
     ENCRYPTED=true
     CRYPT_DEV=$mapper_dev
     FOUND_DEV=$mapper_dev
+    if [ "$HAVE_SET_PASSPHRASE" ]; then
+        warn  "$_Are_you_sure_you_have_written_down_or_memorized_the_new_passphrase_"
+        msg  "$_press_X_to_continue_" "<$(bq  "$_Enter_")>"
+        local xxxx
+        read xxxx
+    fi
 }
 
 #------------------------------------------------------------------------------
@@ -2233,7 +2239,8 @@ change_passphrase() {
 
     local old file=/passphrase
     while true; do
-        echo -en  "$_Please_enter_current_passphrase_in_clear_text_"
+        echo -e  "$_Please_enter_current_passphrase_in_clear_text_"
+        echo -n "> "
         read old
         echo -n "$old" > $file
         cryptsetup open --type luks --test-passphrase --key-file $file $dev &>/dev/null && break
@@ -2244,14 +2251,11 @@ change_passphrase() {
         return 3
     done
 
-    warn  "$_You_will_be_asked_to_enter_the_new_passphrase_twice_"
-    warn  "$_Please_DO_NOT_forget_it_You_will_need_it_every_time_you_boot_"
-    if ! cryptsetup luksChangeKey --key-file $file $dev 2>&1 ; then
-        warn  "$_Passphrase_was_not_changed_"
-        rm $file
-        return 10
+    if ! set_new_passphrase "$file" "$dev"; then
+        err  "$_Passphrase_was_not_changed_"
+        return 3
     fi
-    warn  "$_You_will_be_asked_for_the_new_passphrase_a_third_time_"
+
     rm $file
 }
 
@@ -2263,10 +2267,10 @@ reset_passphrase() {
     test -f $file || return
     local size=$(wc -c $file | cut -d" " -f1)
 
-    msg  "$_Preparing_for_passphrase_first_boot_reset_"
+    warn  "$_Preparing_for_passphrase_first_boot_reset_"
 
     if [ $size -eq 0 ]; then
-        warn  "$_Reset_aborted_phrase_file_is_empty_"
+        warn  "$_Reset_aborted_passphrase_file_is_empty_"
         return 1
     fi
 
@@ -2275,16 +2279,87 @@ reset_passphrase() {
         return 2
     fi
 
-    warn  "$_You_will_be_asked_to_enter_a_new_passphrase_twice_"
-    warn  "$_Please_DO_NOT_forget_it_You_will_need_it_every_time_you_boot_"
-    if ! cryptsetup luksChangeKey --key-file $file $dev 2>&1 ; then
-        warn  "$_Passphrase_was_not_changed_"
-        return 10
+    if ! set_new_passphrase "$file" "$dev"; then
+        err  "$_Passphrase_was_not_changed_"
+        return 3
     fi
-    warn  "$_You_will_be_asked_for_the_new_passphrase_a_third_time_"
-    warn
-    mv $file $file.old
 
+    mv $file $file.old
+}
+
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
+set_new_passphrase() {
+    local file=$1  dev=$2
+    warn  "$_You_will_be_asked_to_enter_a_new_passphrase_twice_"
+    cttyhack cryptsetup luksChangeKey --key-file $file $dev 2>&1 || return $?
+}
+
+#------------------------------------------------------------------------------
+# These version offers the choice of several randomly generated passphrases
+# as well as setting your own.  The problem is there is almost zero entropy
+# this early in the boot process so the "random" phrases are really not very
+# random at all.  Someday we could offer a generated passphrase as an option
+# and then ask the user to generate entropy by typing or something like that.
+# But even that can be tricky because address randomization can eat up more
+# entropy than we generate.
+#------------------------------------------------------------------------------
+fancy_set_new_passphrase() {
+    local file=$1  dev=$2
+
+    local phrase  phrase_2  phrase_3   phrase_4   phrase_5
+    local fmt="$m_co %2s$to_co)$m_co %s$nc_co\n"
+
+    warn  "$_Please_select_a_passphrase_or_create_your_own_"
+
+    local i=1
+    printf "$fmt" "$i"  "$_Create_your_own_passphrase_default_"
+
+    local len=4  max_len=8 seq=$(seq 2 5)
+    for i in $seq; do
+        phrase=$(mkpassphrase $len)
+        eval phrase_$i=\$phrase
+        printf "$fmt" "$i" "$(bq "$phrase")"
+
+        len=$((len + 2))
+        [ $len -gt $max_len ] && len=$max_len
+
+    done
+    i=$((i + 1))
+    printf "$fmt" "$i"  "$_Reboot_"
+    i=$((i + 1))
+    printf "$fmt" "$i"  "$_Poweroff_"
+
+    local ans  create_own use_phrase
+    while true; do
+        read ans
+        case $ans in
+         1|"") create_own=true               ;;
+        [2-5]) eval use_phrase=\$phrase_$ans ;;
+            6) safe-reboot                   ;;
+            7) safe-poweroff                 ;;
+            *) warn  "$_Invalid_selection_please_try_again_" ; continue ;;
+        esac
+        break
+    done
+
+    if [ "$create_own" ]; then
+        warn  "$_You_will_be_asked_to_enter_a_new_passphrase_twice_"
+        cttyhack cryptsetup luksChangeKey --key-file $file $dev 2>&1 || return $?
+
+    elif [ "$use_phrase" ]; then
+        msg  "$_Using_passphrase_X_" "$(bq "$use_phrase")"
+        [ "$DB_PLUS" ] && echo -n "$use_phrase" > /live/config/passphrase
+        printf "%s" "$use_phrase" | cryptsetup luksChangeKey --key-file $file $dev 2>&1 || return $?
+    else
+        fatal  "$_Internal_error_setting_new_passphrase_"
+    fi
+
+    warn  "$_Please_DO_NOT_forget_your_new_passphrase_You_will_need_it_every_time_you_boot_"
+    #warn "You will be asked for the new passphrase to mount the encrypted partition"
+    warn
+    HAVE_SET_PASSPHRASE=true
     return 0
 }
 
@@ -2733,6 +2808,7 @@ breakpoint() {
     custom_code "$bp" "$desc"
 
     if [ "$DB_PLUS" -a -n "${bp##b*}" ]; then
+        vmsg 8  "$_Available_entropy_X_" "$(pq $(cat /proc/sys/kernel/random/entropy_avail 2>/dev/null))"
         local now=$(get_time)
         local delta=$(get_seconds $((now - LAST_BP_TIME)))
         vmsg 9 "$green@bp$cyan[$num_co$bp$m_co]$hi_co $(get_seconds $now)s ($delta)$m_co: $desc"
@@ -2881,7 +2957,6 @@ set_colors() {
        m_co=$nc_co
      num_co=$white
 }
-
 
 get_time() { cut -d" " -f22 /proc/self/stat ;}
 
@@ -3063,7 +3138,7 @@ safe_shutdown() {
     final_umount && vmsg 1  "$_Unmount_successful_"
     breakpoint u "final umount"
     if [ "$ask" ]; then
-        vmsgN 1  "$_Press_Enter_to_X_" "$(hq $cmd)"
+        vmsgN 1  "$_Press_X_to_Y_" "<$(bq  "$_Enter_")>" "$(hq $cmd)"
         read x
     fi
     vmsg -1  "$_Will_now_X_the_system_" "$(hq $cmd)"
@@ -3178,9 +3253,9 @@ initialize_cmdline2() {
 }
 
 my_select_menu() {
-    local dir=$BOOT_MENU_DIR menu=$DO_MENUS
+    local dir=$BOOT_MENU_DIR do_menu=$DO_MENUS
     unset MENU_VALUE
-    [ "$menu" ] || return
+    [ "$do_menu" ] || return
 
     local title=$1  blurb=$2  cheat=$3  dfile=$dir/$4.data mfile=$dir/$4.menu  label=$5  fields=$6
 
@@ -3188,19 +3263,14 @@ my_select_menu() {
 
     local def_label
     local data=$(cat $dfile)
-    mfile=$(xlat_mfile "$mfile" $LANG)
 
-    if [ ! -e $dfile -o  ! -e $mfile ]; then
-        [ "$BOOT_MENU_WARN" ] && warn "Missing $dfile or $mfile"
+    if [ ! -e $dfile -o ]; then
+        [ "$BOOT_MENU_WARN" ] && warn "Missing $dfile"
         return
     fi
 
-    local default_str=$(rpad 16  "$_Default_")
-    local menu=$(cat $mfile | sed -r \
-        -e "s/Default( {8}| *$)/$default_str/" \
-        -e "s/( [0-9]+)(\))/$green\1$white\2$cyan/g" \
-        -e "s/\*/$bold_co*$cyan/g" \
-        -e "s/\(([^)]+)\)/$nc_co(\1)$cyan/g")
+    local menu=$(read_menu_file $mfile)
+    [ -z "$menu" ] && return
 
     [ "$blurb"     ] && title="$title\n$blurb"
     [ "$fields"    ] && def_label=$(get_default_label "$fields" $dfile)
@@ -3228,6 +3298,29 @@ my_select_menu() {
                    *) [ -n "$new_label" ] && msg  "$_X_set_to_Y_" "$label" "$(bq $new_label)"
                       cmdline="$cmdline $MENU_VALUE"   ;;
     esac
+}
+
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
+read_menu_file() {
+    local name=$1
+    local mfile=$(xlat_mfile "$mfile" $LANG)
+
+    if [ ! -e $dfile -o  ! -e $mfile ]; then
+        [ "$BOOT_MENU_WARN" ] && warn "Missing $dfile or $mfile"
+        return 1
+    fi
+
+    local default_str=$(rpad 16  "$_Default_")
+
+    cat $mfile | sed -r \
+        -e "s/Default( {8}| *$)/$default_str/" \
+        -e "s/( [0-9]+)(\))/$green\1$white\2$cyan/g" \
+        -e "s/\*/$bold_co*$cyan/g" \
+        -e "s/\(([^)]+)\)/$nc_co(\1)$cyan/g"
+
+    return 0
 }
 
 rpad() {
@@ -3686,7 +3779,9 @@ prog_copy_md5() {
 }
 
 #------------------------------------------------------------------------------
-#
+# prog_copy <dest> <src1> <src2> ...
+# Copy source files to destination directory and display a bar indicating the
+# progress.
 #------------------------------------------------------------------------------
 prog_copy() {
     local dest=$1 ; shift
@@ -3717,13 +3812,13 @@ prog_copy() {
     local cur_size=$base_size cur_pct last_pct=0
     while true; do
         if ! test -d /proc/$COPY_PID; then
-            echo 100
+            echo 1000
             break
         fi
         sleep 0.1
 
         cur_size=$(du_size $dest)
-        cur_pct=$((cur_size * 100 / final_size))
+        cur_pct=$((cur_size * 1000 / final_size))
         [ $cur_pct -gt $last_pct ] || continue
         echo $cur_pct
         last_pct=$cur_pct
@@ -3753,6 +3848,8 @@ prog_copy() {
 #------------------------------------------------------------------------------
 # This acts like an external program to draw a progress bar on the screen.
 # It expects integer percentages as input on stdin to move the bar.
+# Now using 1/10th percent steps which seems to reduce jitteriness/jaggedness.
+# Yes, because there was aliasing between 100 steps and width of screen.
 #------------------------------------------------------------------------------
 text_progress() {
     local abs_max_x=$((SCREEN_WIDTH * PROG_BAR_WIDTH / 100))
@@ -3768,20 +3865,24 @@ text_progress() {
     while read input; do
         case $input in
             [0-9]|[0-9][0-9]|[0-9][0-9][0-9]) ;;
+                        [0-9][0-9][0-9][0-9]) ;;
             *) break;;
         esac
 
-        cur_x=$((max_x * input / 100))
+        [ $input -gt 1000 ] && input=1000
+        cur_x=$((max_x * input / 1000))
         # Note we always draw entire bar to avoid problems when switching
         # virtual terminals while the bar is being drawn
 
         [ $cur_x -le $last_x ] && continue
-        progbar_draw $cur_x 0
+        # Draw the bar
+        printf "\e[u\e[0C$m_co%${cur_x}s$bold_co>$nc_co\e[u" | tr ' ' '='
+        # Show the percentage
+        printf "\e[$((max_x + 2))C%3s%%" "$((input / 10))"
 
         last_x=$cur_x
 
-        printf "\e[$((max_x + 2))C%3s%%" "$input"
-        [ $input -ge 100 ] && break
+        [ $input -ge 1000 ] && break
     done
 }
 
@@ -5409,7 +5510,7 @@ prepare_switch_root() {
     mountpoint $fbsys &>/dev/null && umount $fbsys
 
     local dir old new
-    for dir in bin config etc lib locale custom menus; do
+    for dir in bin config etc lib locale custom menus share; do
         old=$root_dir/$dir
         test -e $old || old=$live_dir/$dir
         new=$new_live/$dir
