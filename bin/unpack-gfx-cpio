@@ -4,9 +4,9 @@
 
 ME=${0##*/}
 
-INITRD_FILE=/live/boot-dev/antiX/initrd.gz
-INITRD_DIR=./initrd
-REPACK_ARGS="-o -H newc --owner root:root --quiet"
+CPIO_FILE=/live/boot-dev/boot/syslinux/gfx-cpio
+CPIO_DIR=./gfx-cpio-dir
+REPACK_ARGS="-o --owner root:root --quiet"
 UNPACK_ARGS="-idum --quiet"
 
 
@@ -16,12 +16,13 @@ usage() {
     cat <<Usage
 Usage:  $ME [options]
 
-Unpack and repack the live initrd.gz for antiX and MX.
+Unpack and repack the live gfx-cpio archive used by the
+live syslinux (and isolinux) bootloader
 
 Options:
   -c  --clear          Delete directory before unpacking
-  -d  --dir=<dir>      Unpack in <dir> instead of $INITRD_DIR
-  -f  --from=<file>    Unpack <file> instead of $INITRD_FILE
+  -d  --dir=<dir>      Unpack in <dir> instead of $CPIO_DIR
+  -f  --from=<file>    Unpack <file> instead of $CPIO_FILE
   -h  --help           Show this usage
   -p  --pretend        Show commands without running them
   -r  --repack         Repack the initrd
@@ -36,11 +37,11 @@ eval_argument() {
     local arg=$1 val=$2
         case $arg in
              -clear|c) CLEAR=true                      ;;
-               -dir|d) INITRD_DIR=$val                 ;;
-               -dir=*) INITRD_DIR=$val                 ;;
+               -dir|d) CPIO_DIR=$val                   ;;
+               -dir=*) CPIO_DIR=$val                   ;;
               -help|h) usage                           ;;
-              -from|f) INITRD_FILE=$val                ;;
-              -from=*) INITRD_FILE=$val                ;;
+              -from|f) CPIO_FILE=$val                  ;;
+              -from=*) CPIO_FILE=$val                  ;;
            -pretend|p) PRETEND=true                    ;;
             -repack|r) REPACK=true                     ;;
              -quiet|q) QUIET=true                      ;;
@@ -68,17 +69,17 @@ main() {
     [ $# -gt 0 ] && fatal "Unexpected arguments: %s" "$*"
 
     if [ "$REPACK" ]; then
-        qsay "Repack: %s ---> %s" "$(pq ${INITRD_DIR%/}/)" "$(pq $INITRD_FILE)"
-        repack_initrd "$INITRD_FILE" "$INITRD_DIR"
+        qsay "Repack: %s ---> %s"  "$(pq ${CPIO_DIR%/}/)" "$(pq $CPIO_FILE)"
+        repack_cpio "$CPIO_FILE" "$CPIO_DIR"
     else
-        qsay "Unpack: %s ---> %s" "$(pq $INITRD_FILE)" "$(pq ${INITRD_DIR%/}/)"
-        unpack_initrd "$INITRD_FILE" "$INITRD_DIR"
+        qsay "Unpack: %s ---> %s" "$(pq $CPIO_FILE)" "$(pq ${CPIO_DIR%/}/)"
+        unpack_cpio "$CPIO_FILE" "$CPIO_DIR"
     fi
 
     exit 0
 }
 
-unpack_initrd() {
+unpack_cpio() {
     local file=$1  dir=$2
 
     test -e "$file" || fatal "File %s not found" "$file"
@@ -98,10 +99,10 @@ unpack_initrd() {
 
     cmd mkdir -p "$dir" || fatal "Could not make directory %s" "$dir"
 
-    cmd gunzip -c "$file" | (cd "$dir" && cmd cpio $UNPACK_ARGS) || fatal "Unpack failed"
+    cmd cat "$file" | (cd "$dir" && cmd cpio $UNPACK_ARGS) || fatal "Unpack failed"
 }
 
-repack_initrd() {
+repack_cpio() {
     local file=$1  dir=$2
     test -e "$dir" || fatal "The directory %s does not exist" "$dir"
     test -d "$dir" || fatal "%s is not a directory" "$dir"
@@ -109,11 +110,7 @@ repack_initrd() {
     local targ_dir=$(dirname "$file")
     cmd mkdir -p "$targ_dir"
 
-    (cd "$dir" && cmd find . | grep -v "^\./\." | cmd cpio $REPACK_ARGS) \
-        | gzip -9 | cmd write_file "$file"
-
-    local fname=$(basename $file)
-    (cd "$targ_dir" && cmd md5sum "$(basename "$fname")" | cmd write_file "$fname.md5")
+    (cd "$dir" && cmd find . | grep -v "^\./\." | cmd cpio $REPACK_ARGS) | cmd write_file "$file"
 }
 
 empty_dir() {
