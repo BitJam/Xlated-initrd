@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.01.02"
-           VERSION_DATE="Thu Jun 22 13:07:54 MDT 2017"
+                VERSION="8.02.02"
+           VERSION_DATE="Sun Jul  2 11:25:40 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -37,7 +37,7 @@
     FAILSAFE_BOOT_RETRY=30
 
     #DISABLE_SERVICES_OPTS="(c[0-9]+(\.[0-9]*)?|c\.[0-9]+|[ADLMPSWXacdgklmnNrsvwx])+"
-    DISABLE_SERVICES_OPTS="[aAdgklmnNPrsSvwWx]+"
+    DISABLE_SERVICES_OPTS="[aAdgklmnNPrsSvVwWx]+"
 
            RW_MODE="ro"
        #DISTRO_NAME="Linux"
@@ -90,6 +90,12 @@
        CRYPT_FNAME=encrypted
    OLD_CRYPT_FNAME=crypt
          LUKS_NAME=liveb
+
+ ENCRYPT_MODE_FILE=/etc/encrypt
+   ENCRYPT_DISABLE=disable
+      ENCRYPT_BOTH=both
+      ENCRYPT_ONLY=enable
+
       PHRASE_FNAME=passphrase
         SEED_FNAME=random-seed
 
@@ -681,9 +687,11 @@ read_cmdline_params()
             persistdev=*|pdev=*) PERSIST_ID=name=$value   ;  SET_PERSIST=true    ;;
 
                      passphrase) CHANGE_PASSPHRASE=true                          ;;
-                        nocrypt) NO_CRYPT=true                                   ;;
+                        nocrypt) ENCRYPT_MODE=$ENCRYPT_DISABLE                            ;;
+                      encrypt=*) ENCRYPT_MODE=$value                             ;;
+                        encrypt) ENCRYPT_MODE=$ENCRYPT_ONLY                               ;;
 #-?                          crypt)                             SET_CRYPT=true      ;;
-#-?                        crypt=*) CRYPT_FNAME=$value        ;  SET_CRYPT=true      ;;
+#-?                        crypt=*) CRYPT_FNAME=$value       ;  SET_CRYPT=true      ;;
 #-?   cryptlabel=*|clabel=*|clab=*) CRYPT_ID=label=$value    ;  SET_CRYPT=true      ;;
 #-?            cryptuuid=*|cuuid=*) CRYPT_ID=uuid=$value     ;  SET_CRYPT=true      ;;
 #-?              cryptdev=*|cdev=*) CRYPT_ID=dev=$value      ;  SET_CRYPT=true      ;;
@@ -981,12 +989,6 @@ read_cmdline_params()
     if [ "$DISABLE_STORE" ]; then
         USER_UID=0
         USER_GID=0
-    fi
-
-    test -e /bin/cryptsetup || NO_CRYPT=true
-
-    if [ -z "$NO_CRYPT" ]; then
-        cryptsetup --help &>/dev/null || NO_CRYPT=true
     fi
 }
 
@@ -2135,7 +2137,7 @@ find_linuxfs_file() {
         # Find the linuxfs file
         SQFILE_FULL="$ISO_FILE_MP/$SQFILE_FILE"
         [ -f "$SQFILE_FULL" ] \
-            || linuxfs_error  "$_File_X_not_found_on_device_Y_" "$LINUXFS_NAME" "$SQFILE_FULL" "$FOUND_DEV"
+            || linuxfs_error  "$_File_X_not_found_on_device_Y_" "$SQFILE_FULL" "$FOUND_DEV"
 
         SQFILE_MP=$ISO_FILE_MP
         SQFILE_DEV=$FOUND_DEV   # Used for toram-eject
@@ -2160,60 +2162,117 @@ find_linuxfs_file() {
     DEFAULT_DIR=$SQFILE_DIR
 }
 
+#------------------------------------------------------------------------------
+# Make sure the mode is valid and if encryption is enabled then make sure that
+# we have all of the tools needed, otherwise disable it.
+#------------------------------------------------------------------------------
+validate_encryption_mode() {
+    local mode=${ENCRYPT_MODE:-$(head -n1 $ENCRYPT_MODE_FILE 2>/dev/null)}
+
+    case $mode in
+        $ENCRYPT_DISABLE|$ENCRYPT_BOTH|$ENCRYPT_ONLY) ;;
+        uuid=*)                                       ;;
+        *) warn  "$_Invalid_encryption_mode_X_" "$mode"
+           warn  "$_Disabling_encryption_"
+           mode=$ENCRYPT_DISABLE ;;
+    esac
+
+    ENCRYPT_MODE=$mode
+    [ "$mode" = '$ENCRYPT_DISABLE' ] && return
+
+    if ! test -d /sys/module/dm_crypt; then
+        warn  "$_Required_encryption_kernel_module_X_not_found_" "$(pqw dm-crypt)"
+        warn  "$_Disabling_encryption_"
+        ENCRYPT_MODE=$ENCRYPT_DISABLE
+        return
+    fi
+
+    if ! test -e /bin/cryptsetup; then
+        warn  "$_The_X_program_was_not_found_" "$(pqw cryptsetup)"
+        warn  "$_Disabling_encryption_"
+        ENCRYPT_MODE=$ENCRYPT_DISABLE
+        return
+    fi
+
+    cryptsetup --help &>/dev/null && return
+    warn  "$_The_X_program_is_broken_" "$(pw cryptsetup)"
+    warn  "$_Disabling_encryption_"
+    ENCRYPT_MODE=$ENCRYPT_DISABLE
+}
 
 #------------------------------------------------------------------------------
 # This code is used in 2 places.  Very yuck right now.
 #------------------------------------------------------------------------------
 find_crypt_or_linuxfs() {
 
-        # Make sure we have the dm-crypt module
-    if [ -z "$NO_CRYPT" ] && ! test -d /sys/module/dm_crypt; then
-        NO_CRYPT=true
-        warn  "$_Encryption_disabled_because_required_kernel_module_not_found_"
+    validate_encryption_mode
+
+    local boot_dir=$(dirname $SQFILE_FILE)  fname=$(basename $SQFILE_FILE)
+    local crypt_full="$boot_dir/$CRYPT_FNAME"
+
+    CRYPT_UUID=
+    local files
+    case $ENCRYPT_MODE in
+        $ENCRYPT_DISABLE) files="$SQFILE_FILE"              ;;
+           $ENCRYPT_BOTH) files="$crypt_full $SQFILE_FILE"  ;;
+           $ENCRYPT_ONLY) files="$crypt_full"               ;;
+                  uuid=*) CRYPT_UUID=${ENCRYPT_MODE#uuid=}  ;;
+                       *) fatal  "$_Unknown_encyption_mode_X_" "$ENCRYPT_MODE" ;;
+    esac
+
+    local crypt_dev
+
+    if [ "$CRYPT_UUID" ]; then
+        local try
+        msg  "$_Looking_for_encrypted_device_with_uuid_X_" "$(pq "$CRYPT_UUID")"
+        for try in $(seq 1 $BOOT_RETRY); do
+            crypt_dev=$(blkid | grep "UUID=.$CRYPT_UUID." | cut -d: -f1)
+            [ -n "$crypt_dev" ] && break
+            echo -n "."
+            sleep 1
+        done
+        echo
+
+    else
+
+        #msg "Look for file(s) %s" "<$(fq $files)>"
+
+        if ! find_boot_file "$files" "$BOOT_MP" "$BOOT_ID" "$BOOT_RETRY"; then
+            case $ENCRYPT_MODE in
+                $ENCRYPT_DISABLE) linuxfs_error  "$_Could_not_find_file_X_" "$(fqe $SQFILE_FILE)"                             ;;
+                   $ENCRYPT_BOTH) linuxfs_error  "$_Could_not_find_files_X_or_Y_" "$(fqe $SQFILE_FILE)" "$(fqe $crypt_full)" ;;
+                   $ENCRYPT_ONLY) linuxfs_error  "$_Could_not_find_file_X_" "$(fqe $crypt_full)"                              ;;
+            esac
+        fi
+
+        [ "$FOUND_FNAME" != "$crypt_full" ] && return
+
+        BIOS_UUID=$(device_uuid $FOUND_DEV)
+        BIOS_DEV=$FOUND_DEV
+
+        # Move mounted "bios" device out of the way
+        mkdir -p $BIOS_MP
+        log_cmd mount --move $BOOT_MP $BIOS_MP
+
+        local crypt_file="$BIOS_MP/${crypt_full#/}"
+
+        CRYPT_UUID=$(head -n1 $crypt_file 2>/dev/null)
+        [ -n "$CRYPT_UUID" ] && crypt_dev=$(blkid | grep "UUID=.$CRYPT_UUID." | cut -d: -f1)
     fi
 
-    if [ "$NO_CRYPT" ]; then
-        # Normal path
-        find_boot_file "$SQFILE_FILE" "$BOOT_MP" "$BOOT_ID" "$BOOT_RETRY" \
-            || linuxfs_error  "$_Could_not_find_X_file_Y_" "$LINUXFS_NAME" "$(fqe \"$SQFILE_FILE\")"
-        return
-    fi
+    vmsg 7  "$_crypt_uuid_X_crypt_dev_Y_" "$(pq "$CRYPT_UUID")" "$(pq $crypt_dev)"
 
-    # Look for crypt file as well as sqfile_file
-    local boot_dir=$(dirname $SQFILE_FILE)
-    local crypt_full="$boot_dir/$CRYPT_FNAME"  old_crypt_full="$boot_dir/$OLD_CRYPT_FNAME"
-    local files="$crypt_full $old_crypt_full $SQFILE_FILE"
-    msg  "$_Look_for_files_X_" "<$(fq $files)>"
+    [ -z "$crypt_dev" ] && fatal  "$_No_encrypted_device_with_uuid_X_was_found_" "$(pqh "$CRYPT_UUID")"
 
-    find_boot_file "$files" "$BOOT_MP" "$BOOT_ID" "$BOOT_RETRY" \
-        || linuxfs_error  "$_Could_not_find_files_X_or_Y_" "$LINUXFS_NAME" "$(fqe \"$SQFILE_FILE\")" "$(fqe \"$crypt_full\")"
+    : ${CRYPT_UUID:=$(device_uuid $crypt_dev)}
 
-    [ "$FOUND_FNAME" != "$crypt_full" -a "$FOUND_FNAME" != "$old_crypt_full" ] && return
-
-    BIOS_UUID=$(device_uuid $FOUND_DEV)
-    BIOS_DEV=$FOUND_DEV
-
-    # Move mounted "bios" device out of the way
-    mkdir -p $BIOS_MP
-    log_cmd mount --move $BOOT_MP $BIOS_MP
-
-    local crypt_dev  crypt_files="$BIOS_MP/${crypt_full#/} $BIOS_MP/${old_crypt_full#/}"
-
-    CRYPT_UUID=$(cat $crypt_files 2>/dev/null | head)
-
-    [ -n "$CRYPT_UUID" ] && crypt_dev=$(blkid | grep "UUID=.$CRYPT_UUID." | cut -d: -f1)
-
-    vmsg 7 "crypt_uuid:$CRYPT_UUID   crypt_dev:$crypt_dev"
-
-    [ -z "$crypt_dev" ] && crypt_dev=$(next_partition $FOUND_DEV)
-    [ -z "$CRYPT_UUID" ] && CRYPT_UUID=$(device_uuid $crypt_dev)
     BOOT_UUID=$CRYPT_UUID
 
     msg  "$_Checking_for_encrypted_partition_on_device_X_" "$crypt_dev"
 
-    test -e $crypt_dev || fatal  "$_Encrypted_device_X_does_not_exist_"        $crypt_dev
-    test -b $crypt_dev || fatal  "$_Encrypted_device_X_is_not_a_block_device_" $crypt_dev
-    cryptsetup isLuks $crypt_dev || fatal  "$_Encrypted_device_X_is_not_a_LUKS_device_" $crypt_dev
+    test -e "$crypt_dev" || fatal  "$_Encrypted_device_X_does_not_exist_"                 "$(dqe $crypt_dev)"
+    test -b "$crypt_dev" || fatal  "$_Encrypted_device_X_is_not_a_block_device_"          "$(dqe $crypt_dev)"
+    cryptsetup isLuks "$crypt_dev" || fatal  "$_Encrypted_device_X_is_not_a_LUKS_device_" "$(dqe $crypt_dev)"
 
     mount -o remount,rw $BIOS_DEV
 
@@ -2378,6 +2437,10 @@ fancy_set_new_passphrase() {
 
 # FIXME: mention failsafe option or load=all.
 
+#------------------------------------------------------------------------------
+# Get error message from args and then print extra info about our search in a
+# fatal error message.
+#------------------------------------------------------------------------------
 linuxfs_error() {
     local msg=$(printf "$@")  device_list=$(echo $DEVICE_LIST)
     local all_devices=$(echo $(most_block_devices));
@@ -2390,6 +2453,10 @@ linuxfs_error() {
         "$(printf  "$_Please_contact_X_at_Y_" "$DEVELOPER" "$DISTRO_BUG_REPORT_URL")"
 }
 
+#------------------------------------------------------------------------------
+# Make sure the running kernel has a /lib/modules/$KERNEL directory inside the
+# linuxfs file
+#------------------------------------------------------------------------------
 check_kernel_version() {
     local mp=${1%/}  fatal=$2
     local kversion=$(uname -r)
@@ -3280,6 +3347,7 @@ initialize_cmdline2() {
         [ -z "${DISABLE_SERVICES##*s*}" ] && cmdline="$cmdline${cmdline:+ }nosavestate"
         [ -z "${DISABLE_SERVICES##*r*}" ] && cmdline="$cmdline${cmdline:+ }norepo"
         [ -z "${DISABLE_SERVICES##*k*}" ] && cmdline="$cmdline${cmdline:+ }noloadkeys"
+        [ -z "${DISABLE_SERVICES##*V*}" ] && cmdline="$cmdline${cmdline:+ }vboxdecor"
         # if [ -z "${DISABLE_SERVICES##*c*}" ]; then
         #     local desk_delay=$(echo $DISABLE_SERVICES | sed -r 's/[^c]*c([0-9]+(\.[0-9]*)?|\.[0-9]+|).*/\1/')
         #     cmdline="$cmdline${cmdline:+ }deskdelay=${desk_delay:-0}"
