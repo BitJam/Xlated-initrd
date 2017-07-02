@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.02.02"
-           VERSION_DATE="Sun Jul  2 11:25:40 MDT 2017"
+                VERSION="8.02.03"
+           VERSION_DATE="Sun Jul  2 13:36:58 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -2172,32 +2172,15 @@ validate_encryption_mode() {
     case $mode in
         $ENCRYPT_DISABLE|$ENCRYPT_BOTH|$ENCRYPT_ONLY) ;;
         uuid=*)                                       ;;
-        *) warn  "$_Invalid_encryption_mode_X_" "$mode"
-           warn  "$_Disabling_encryption_"
-           mode=$ENCRYPT_DISABLE ;;
+        *) fatal  "$_Invalid_encryption_mode_X_" "$mode" ;;
     esac
 
     ENCRYPT_MODE=$mode
     [ "$mode" = '$ENCRYPT_DISABLE' ] && return
 
-    if ! test -d /sys/module/dm_crypt; then
-        warn  "$_Required_encryption_kernel_module_X_not_found_" "$(pqw dm-crypt)"
-        warn  "$_Disabling_encryption_"
-        ENCRYPT_MODE=$ENCRYPT_DISABLE
-        return
-    fi
-
-    if ! test -e /bin/cryptsetup; then
-        warn  "$_The_X_program_was_not_found_" "$(pqw cryptsetup)"
-        warn  "$_Disabling_encryption_"
-        ENCRYPT_MODE=$ENCRYPT_DISABLE
-        return
-    fi
-
-    cryptsetup --help &>/dev/null && return
-    warn  "$_The_X_program_is_broken_" "$(pw cryptsetup)"
-    warn  "$_Disabling_encryption_"
-    ENCRYPT_MODE=$ENCRYPT_DISABLE
+    test -d /sys/module/dm_crypt  || fatal  "$_Required_encryption_kernel_module_X_not_found_"      "$(pqh dm-crypt)"
+    test -e /bin/cryptsetup       || fatal  "$_The_X_program_was_not_found_Cannot_do_encryption_" "$(pqh cryptsetup)"
+    cryptsetup --help &>/dev/null || fatal  "$_The_X_program_is_broken_Cannot_do_encryption_"     "$(pqh cryptsetup)"
 }
 
 #------------------------------------------------------------------------------
