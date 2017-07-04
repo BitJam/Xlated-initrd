@@ -2,8 +2,8 @@
    2)  checkmd5        Vérifier l'integrité du média live
    3)  checkfs         Vérifier les systèmes de fichiers LiveUSB et persistants de type ext2/3/4
    4)  toram           Copier vers la RAM le système compressé de fichiers
-   5)  from=usb        Termination du démarrage d'un LiveUSB
-   6)  from=hd         Termination du démarrage d'un disque dur
+   5)  from=usb        Fin du démarrage depuis un LiveUSB
+   6)  from=hd         Fin du démarrage depuis un disque dur
    7)  nousb2          Désactiver tous les périphériques usb-2 pendant le démarrage
    8)  hwclock=ask     Faire le système aider à déterminer le réglage de l'horloge
    9)  hwclock=utc     L'horloge interne se sert de UTC (systèmes n'ayant que de Linux )
