@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.02.05"
-           VERSION_DATE="Tue Jul  4 13:26:28 MDT 2017"
+                VERSION="8.10.01"
+           VERSION_DATE="Sun Jul  9 23:04:22 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -313,7 +313,7 @@ main_wrapper() {
         vmsg 5 "${hi_co}%s" 'Please exit shells normally to allow for a clean unmount'
 
         CHROOT_BIN=$FINAL_DIR/bin
-        chroot $NEW_ROOT $CHROOT_BIN/setsid $CHROOT_BIN/cttyhack $INIT_PROG
+        $SET_ARCH chroot $NEW_ROOT $CHROOT_BIN/setsid $CHROOT_BIN/cttyhack $INIT_PROG
         breakpoint i "after init= chroot"
 
         MY_LOG=/dev/null
@@ -323,10 +323,15 @@ main_wrapper() {
         : ${INIT_COMMAND:=/sbin/init}
         test -x $NEW_ROOT$INIT_COMMAND || INIT_COMMAND=/sbin/init
         vmsg 6  "Start %s process" $(pq $INIT_COMMAND)
+
+        [ "$NO_CLEAR" ] || [ "$NO_MODESET" ] || clear
         exec $LIVE_BIN/switch_root -c /dev/console $NEW_ROOT $INIT_COMMAND "$@"
     fi
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 main_core() {
     [ "$NO_CLEAR" ] || clear       # Clear and reset screen
     vmsg 6 "=== initrd bootstrap =================================================="
@@ -579,6 +584,9 @@ system_mount() {
     mount -t devpts devpts $dir/dev/pts
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 make_nodes() {
     local dir=$1
     mkdir -p $dir
@@ -588,12 +596,18 @@ make_nodes() {
     [ -e $dir/tty0    ] || mknod $dir/tty0    c 4 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 read_distro_release() {
     local file=$1
     #sed -r -n 's/^\s*([A-Z0-9_]+=)/DISTRO_\1/p' $file >> $MY_LOG
     eval $(sed -r -n 's/^\s*([A-Z0-9_]+=)/DISTRO_\1/p' $file)
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 clear_env() {
     local ev
     # unset almost all env variables
@@ -605,6 +619,9 @@ clear_env() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 read_late_cmdline_params() {
     #vmsg 6 "read_late_cmdline_params: $*"
     local param value cmdline=${1:-$(cat /proc/cmdline)}
@@ -645,6 +662,9 @@ read_late_cmdline_params() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 set_frugal() {
     : ${FRUGAL_ID:=label=$DISTRO_NAME-Frugal}
     [ "$NO_LABEL_FRUGAL" ] || LABEL_FRUGAL=true
@@ -690,12 +710,9 @@ read_cmdline_params()
                         nocrypt) ENCRYPT_MODE=$ENCRYPT_DISABLE                   ;;
                       encrypt=*) ENCRYPT_MODE=$value                             ;;
                         encrypt) ENCRYPT_MODE=$ENCRYPT_ONLY                      ;;
-#-?                          crypt)                             SET_CRYPT=true      ;;
-#-?                        crypt=*) CRYPT_FNAME=$value       ;  SET_CRYPT=true      ;;
-#-?   cryptlabel=*|clabel=*|clab=*) CRYPT_ID=label=$value    ;  SET_CRYPT=true      ;;
-#-?            cryptuuid=*|cuuid=*) CRYPT_ID=uuid=$value     ;  SET_CRYPT=true      ;;
-#-?              cryptdev=*|cdev=*) CRYPT_ID=dev=$value      ;  SET_CRYPT=true      ;;
-#-?
+                    encrypt=off) ENCRYPT_MODE=$ENCRYPT_DISABLE                   ;;
+                     encrypt=on) ENCRYPT_MODE=$ENCRYPT_ONLY                      ;;
+
                          btry=*) small_int CMD_BOOT_RETRY $param                 ;;
                          ftry=*) small_int CMD_FRUGAL_RETRY $param               ;;
                          ptry=*) small_int CMD_PERSIST_RETRY $param              ;;
@@ -992,6 +1009,9 @@ read_cmdline_params()
     fi
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 small_int() {
     local var=$1 val=${2#*=} name=${2%%=*} param=$2
 
@@ -1003,6 +1023,9 @@ small_int() {
     INTEGER_ERRORS="$INTEGER_ERRORS $param"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 any_int() {
     local var=$1 val=${2#*=} name=${2%%=*} param=$2
 
@@ -1019,6 +1042,9 @@ coldplug_delay() {
     sleep $COLDPLUG_DELAY
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 start_coldplug_loop() {
     coldplug-loop $PLUG_LOOP_DELAY &>/dev/null 17>/dev/null &
     COLDPLUG_LOOP_PID=$!
@@ -1026,6 +1052,9 @@ start_coldplug_loop() {
     echo $COLDPLUG_LOOP_PID > /COLDPLUG_LOOP_PID
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 start_hotplug() {
     local trace_load=$1  targ=/proc/sys/kernel/hotplug
 
@@ -1044,6 +1073,9 @@ start_hotplug() {
     fi
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 stop_hotplug() {
     local targ=/proc/sys/kernel/hotplug
     test -e $targ && echo | tee $targ &>/dev/null
@@ -1055,11 +1087,17 @@ stop_hotplug() {
     kill -9 $COLDPLUG_LOOP_PID
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 old_stop_hotplug() {
     local targ=/proc/sys/kernel/hotplug
     test -e $targ && echo | tee $targ &>/dev/null
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 list_modules() {
     local mod list cnt=0
     list=$( echo $(lsmod | grep "^[a-z]" | cut -d" " -f1) | sort)
@@ -1076,9 +1114,11 @@ list_modules() {
     vmsg 6 '%s module(s) failed to load' $(nq $ecnt)
 
     vmsg 7 "$white$ERR_MODULES"
-
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 select_breakpoints() {
     case $BREAK_POINTS in
         *\?*|*ask*)
@@ -1097,6 +1137,9 @@ select_breakpoints() {
     esac
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 mem_info() {
     local info amt kb
     while read info amt kb; do
@@ -1106,11 +1149,17 @@ mem_info() {
     done </proc/meminfo
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 clean_xlat() {
     find $LOCALE_DIR/xlat -name init.xlat -delete
     #rm -rf $LOCALE_DIR/fonts
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 read_xlat() {
     local prog=$1  lang=${2%%_*}
     local xdir=$LOCALE_DIR/xlat
@@ -1270,6 +1319,9 @@ do_welcome() {
     # vmsg 6  "$cpu_format" '                    Cache' "$(cpu_param 'cache size' unknown)"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 show_bootcodes() {
     local unknown=$1
 
@@ -1288,6 +1340,9 @@ show_bootcodes() {
     vmsg 4
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 show_integer_errors() {
     local param name value params=$1
 
@@ -1300,6 +1355,9 @@ show_integer_errors() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 show_disable_errors() {
     local codes=$1  ds_param=$2
     [ -n "$codes" ] || return
@@ -1309,12 +1367,18 @@ show_disable_errors() {
     warn  "$_Unknown_option_s_in_X_Unknown_option_s_Y_" "$(pqw $ds_param)" "$(pqw $bad)"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 cpu_param() {
     local result=$(grep "^$1" /proc/cpuinfo | head -n 1 | sed 's/.*\t: //')
     [ "$result" ] || result=$2
     echo "$result"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 disable_hcd() {
     local type=$1
     local dir=/sys/bus/pci/drivers/${type}_hcd
@@ -1329,6 +1393,9 @@ disable_hcd() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 get_fbcondecor_width() {
     local theme=${1:-default}  res
     local fbsize_file=/sys/class/graphics/fb0/virtual_size
@@ -1343,6 +1410,9 @@ get_fbcondecor_width() {
     fi
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 get_fbcondecor_theme() {
 
     local boot_param=${1:-$SPLASH_PARAM}
@@ -1358,6 +1428,9 @@ get_fbcondecor_theme() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 set_fbcondecor() {
     local boot_param=$1 orig_name=$2 param verbose theme=default
     #vmsg 5 "set_fbcondecor('$1' '$2')"
@@ -1389,6 +1462,9 @@ set_fbcondecor() {
     $prog -c on 2>/dev/null
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 blacklist_modules() {
     local black_list=$1
     [ "$black_list" ] || return
@@ -1398,6 +1474,9 @@ blacklist_modules() {
     echo $black_list | sed 's/,/\n/g' | sed -r 's/^([a-z])/blacklist \1/' >> $BLACK_LIST_FILE
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 load_kernel_modules() {
     local list=$1 file=$2
 
@@ -1416,6 +1495,9 @@ load_kernel_modules() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 load_all_modules() {
     local subdir=$1
     msg  "$_Loading_all_modules_"
@@ -1426,12 +1508,18 @@ load_all_modules() {
         | xargs modprobe -q -a -b 2>/dev/null
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 debug_cmd() {
     echo "==== $*"                        >> $MY_LOG
     "$@"                                  >> $MY_LOG
     echo "==============================" >> $MY_LOG
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 coldplug_modules() {
     local verb=$1
 
@@ -1474,6 +1562,9 @@ is_usb_or_removable() {
     return $?
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 is_removable() {
     local drive=$(get_drive $1)
     local dir=/sys/block/$drive flag
@@ -1494,6 +1585,9 @@ get_drive() {
     esac
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 next_partition() {
     local device=$1  dev=${1##*/}
     local pre=${device%%$dev}
@@ -1588,6 +1682,9 @@ from_filter() {
     return $?
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 find_boot_file() {
     local ret
     find_files boot "$@"
@@ -1922,26 +2019,41 @@ find_device() {
     return $err_ret
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 device_uuid() {
     local device=$1
     blkid $device | sed -n -r 's/.* UUID="([^"]*)"( |$).*/\1/p'
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 device_label() {
     local device=$1
     blkid $device | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/[^:]*: LABEL="//p'
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 device_fstype() {
     local device=$1
     blkid $device | sed -n -r 's/.* TYPE="([^"]*)"$/\1/p' | tail -n 1
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 mntpnt_fstype() {
     local dev=$(df -P $1 | tail -n1 | cut -d" " -f1)
     device_fstype $dev
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 frugal_error() {
 
     # Disable persistence if frugal fails or is aborted
@@ -1957,6 +2069,9 @@ frugal_error() {
 
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 find_frugal_file() {
     local frugal_id=$1  bdir=$DISTRO_NAME-Frugal-$(uname -r)
     local sqfile=$bdir/$SQFILE_NAME need_to_ask
@@ -2108,6 +2223,9 @@ find_frugal_file() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 find_linuxfs_file() {
 
     if [ -n "$ISO_FILE" -o -n "$FROM_ISO" ]; then
@@ -2167,17 +2285,24 @@ find_linuxfs_file() {
 # we have all of the tools needed, otherwise disable it.
 #------------------------------------------------------------------------------
 validate_encryption_mode() {
-    local mode=${ENCRYPT_MODE:-$(head -n1 $ENCRYPT_MODE_FILE 2>/dev/null)}
-    : ${mode:=$ENCRYPT_DISABLE}
 
-    case $mode in
-        $ENCRYPT_DISABLE|$ENCRYPT_BOTH|$ENCRYPT_ONLY) ;;
-        uuid=*)                                       ;;
+    : ${ENCRYPT_MODE=$(head -n1 $ENCRYPT_MODE_FILE 2>/dev/null)}
+
+    # Default to enable or disabled depending on existence of cryptsetup program
+    if [ -z "$ENCRYPT_MODE" ]; then
+        if test -x /bin/cryptsetup; then
+            ENCRYPT_MODE=$ENCRYPT_ONLY
+        else
+            ENCRYPT_MODE=$ENCRYPT_DISABLE
+        fi
+    fi
+
+    case $ENCRYPT_MODE in
+                   $ENCRYPT_DISABLE) return ;;
+        $ENCRYPT_BOTH|$ENCRYPT_ONLY)        ;;
+                             uuid=*)        ;;
         *) fatal  "$_Invalid_encryption_mode_X_" "$mode" ;;
     esac
-
-    ENCRYPT_MODE=$mode
-    [ "$mode" = '$ENCRYPT_DISABLE' ] && return
 
     test -d /sys/module/dm_crypt  || fatal  "$_Required_encryption_kernel_module_X_not_found_"      "$(pqh dm-crypt)"
     test -e /bin/cryptsetup       || fatal  "$_The_X_program_was_not_found_Cannot_do_encryption_" "$(pqh cryptsetup)"
@@ -2201,22 +2326,25 @@ find_crypt_or_linuxfs() {
            $ENCRYPT_BOTH) files="$crypt_full $SQFILE_FILE"  ;;
            $ENCRYPT_ONLY) files="$crypt_full"               ;;
                   uuid=*) CRYPT_UUID=${ENCRYPT_MODE#uuid=}  ;;
-                       *) fatal  "$_Unknown_encyption_mode_X_" "$ENCRYPT_MODE" ;;
+                       *) fatal 'Unknown encyption mode %s' "$ENCRYPT_MODE" ;;
     esac
 
     local crypt_dev
 
+    # Perhaps this can be improved.  Maybe we should grep on the fstype?
     if [ "$CRYPT_UUID" ]; then
-        local try
+        local try devs
         msg  "$_Looking_for_encrypted_device_with_uuid_X_" "$(pq "$CRYPT_UUID")"
         for try in $(seq 1 $BOOT_RETRY); do
-            crypt_dev=$(blkid | grep "UUID=.$CRYPT_UUID." | cut -d: -f1)
-            [ -n "$crypt_dev" ] && break
+
+            devs=$(uuid_to_dev $CRYPT_UUID  "$_TYPE_crypto_LUKS_")
+            [ -n "$devs" ] && break
             echo -n "."
             sleep 1
         done
         echo
-
+        # Take just the first found device for now :(
+        crypt_dev=${devs%% *}
     else
 
         if ! find_boot_file "$files" "$BOOT_MP" "$BOOT_ID" "$BOOT_RETRY"; then
@@ -2329,7 +2457,7 @@ reset_passphrase() {
     fi
 
     if ! cryptsetup open --type luks --test-passphrase --key-file $file $dev &>/dev/null; then
-        warn  "$_Reset_aborted_wrong_passphrase_in_phrase_file_"
+        warn  "$_Reset_aborted_wrong_passphrase_in_passphrase_file_"
         return 2
     fi
 
@@ -2346,8 +2474,12 @@ reset_passphrase() {
 #------------------------------------------------------------------------------
 set_new_passphrase() {
     local file=$1  dev=$2
-    warn  "$_You_will_be_asked_to_enter_a_new_passphrase_twice_"
-    cttyhack cryptsetup luksChangeKey --key-file $file $dev 2>&1 || return $?
+    [ "$DB_PLUS" ] && msg  "$_current_phrase_X_" "$(pq $(cat $file))"
+    while true; do
+        warn  "$_You_will_be_asked_to_enter_a_new_passphrase_twice_"
+        cttyhack cryptsetup luksChangeKey --key-file $file $dev 2>&1 && return 0
+        YES_no  "$_Do_you_want_to_try_again_" || return 2
+    done
 }
 
 #------------------------------------------------------------------------------
@@ -2517,6 +2649,9 @@ mount_linuxfs() {
     SQFS_VID_FILE=$vid_file
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 mount_aufs_ram() {
     local aufs_ram_mp=$1  min_aufs_ram=$2  free_mem=$3
     # Default tempfs size for tempfs = 80% of FREE_MEM
@@ -2528,6 +2663,9 @@ mount_aufs_ram() {
     mount_tmpfs $aufs_ram_mp $AUFS_RAM_SIZE 'aufs ram' || fatal  "$_Create_X_failed_" 'aufs tmpfs'
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 check_unionfs() {
     test -d /sys/module/aufs    && AUFS_OKAY=true
     test -d /sys/module/overlay && OVERLAY_OKAY=true
@@ -2553,6 +2691,9 @@ check_unionfs() {
     esac
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 want_unionfs() {
     local okay=$1  this=$2  other=$3
     if [ "$okay" ]; then
@@ -2563,6 +2704,9 @@ want_unionfs() {
     fi
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 need_unionfs() {
     local okay=$1  this=$2
     if [ "$okay" ]; then
@@ -2575,6 +2719,9 @@ need_unionfs() {
     fi
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 check_existing_unionfs() {
     local mp=$1  type
     if test -d $mp/etc; then
@@ -2592,6 +2739,9 @@ check_existing_unionfs() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 mount_unionfs() {
     local upper_mp aufs_mp=$1  aufs_ram_mp=$3  rootfs_mp=$4
 
@@ -2618,6 +2768,9 @@ mount_unionfs() {
     chmod 1777 $aufs_mp/tmp $aufs_mp/var/tmp
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 mount_overlayfs() {
     local  aufs_mp=$1  sqfs_mp=$2  upper_mp=$3
 
@@ -2645,6 +2798,9 @@ mount_aufs() {
         || fatal  "$_Could_not_mount_X_" aufs
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 link_top_dirs() {
     local mp=$1  dir  mp_dir
     shift
@@ -2659,6 +2815,9 @@ link_top_dirs() {
     vmsg 7
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 try_mount() {
     local dev=$1  mp=$2  rw=${3:-$RW_MODE}
     local type=$(blkid $dev | sed -n -r 's/.* TYPE="([^"]*)"$/\1/p' | tail -n 1)
@@ -2681,6 +2840,9 @@ try_mount() {
     return $?
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 try_file_mount() {
     local file=$1  mp=$2  rw=${3:-$RW_MODE}
     local opts=loop,$rw,noatime
@@ -2733,6 +2895,9 @@ $(dd if=$dev bs=1 skip=1024 count=128 2>/dev/null| hexdump -d | sed -r "s/ 0+([0
 DD_Hexdump
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 should_fsck() {
     local dev=$1  sdev=${1##*/}  name=$2  max_count=$MAX_MOUNT_CNT
     [ "$DO_FSCK" ] || return 1
@@ -2794,6 +2959,9 @@ should_fsck() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 do_fsck() {
     local err ret  name=$1 dev=$2  sdev=$(pq ${2##*/}) opts=${3:--n} filefs=$4
 
@@ -2832,6 +3000,9 @@ do_fsck() {
     return $err
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 fsck_any_device() {
     local dev=$(readlink -f "$1")  mp=$2  lab=$3
     [ -n "$mp" -a -n "$dev" ] || return
@@ -2858,6 +3029,9 @@ set_path() {
     hash -r
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 should_break_at() {
     local bp=$1
     case ,$BREAK_POINTS, in
@@ -2872,6 +3046,9 @@ should_break_at() {
     esac
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 custom_code() {
     local file=$1  desc=$2
 
@@ -2887,6 +3064,9 @@ custom_code() {
     fi
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 breakpoint() {
     local bp=$1  desc=$2
 
@@ -2895,7 +3075,7 @@ breakpoint() {
     if [ "$DB_PLUS" -a -n "${bp##b*}" ]; then
         local now=$(get_time)
         local delta=$(get_seconds $((now - LAST_BP_TIME)))
-        vmsg 8 "$green@bp$cyan[$num_co$bp$m_co]$hi_co $(get_seconds $now)s ($delta)$m_co: $desc"
+        vmsg 8 "$green@bp$cyan[$num_co$bp$m_co]$hi_co %5ss (%5s)$m_co: %s" "$(get_seconds $now)" "$delta" "$desc"
         vmsg 8 'Available entropy %s' "$(pq $(cat /proc/sys/kernel/random/entropy_avail 2>/dev/null))"
         LAST_BP_TIME=$now
     fi
@@ -2926,6 +3106,9 @@ breakpoint() {
     echo
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 do_bash_chroot() {
 
     local rc_file=/root/chrootrc bp=${1:-bash} root_dir=${2:-$NEW_ROOT}
@@ -2985,6 +3168,9 @@ hq()     { echo "$hi_co$*$m_co"           ;}
 ncq()    { echo "$hi_co$*$nc_co"          ;}
 gq()     { echo "$hi_co$*$lt_green"       ;}
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 vmsg() {
     local level=$1  fmt=$2
     shift 2
@@ -2996,6 +3182,9 @@ vmsg() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 vmsgN() {
     local level=$1  fmt=$2
     shift 2
@@ -3007,17 +3196,26 @@ vmsgN() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 vmsg_if() {
     local level=$1; shift
     [ "$VERBOSE" -ge "$level" ] || return
     vmsg $level "$@"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 vmsg_nc() {
     local level=$1; shift
     vmsg $level "$nc_co$@"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 set_colors() {
     local noco=$1  loco=$2
 
@@ -3043,17 +3241,26 @@ set_colors() {
      num_co=$white
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 get_time() { cut -d" " -f22 /proc/self/stat ;}
 
 show_time() {
     msg "$(printf "$green%ss$yellow %s" $(get_seconds) "$*")"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 get_seconds() {
     local dt=${1:-$(get_time)}
     printf "%03d" $dt | sed -r 's/(..)$/.\1/'
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 bogo_meter() {
     local width=${1:-$SCREEN_WIDTH} delay=60  dot=.
     local cnt=$(( width * 80 / 100 ))
@@ -3067,6 +3274,9 @@ bogo_meter() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 time_cmd() {
     local t0=$(get_time)
     (bogo_meter)&
@@ -3082,6 +3292,9 @@ time_cmd() {
     return $ret
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 vmsg_old() {
     local msg nflag  level=$1; shift
 
@@ -3100,6 +3313,9 @@ vmsg_old() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 heading() {
     vmsg 6 $head_co$tbar
     #. Begin [doing some sub process]
@@ -3107,6 +3323,9 @@ heading() {
     vmsg 3 "$@"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 log_cmd() {
     vmsg_nc 8 "$*"
     #"$@" >/dev/null
@@ -3171,6 +3390,9 @@ _error() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 move_mountpoints() {
     local dir mp old aufs_live=/live/aufs$FINAL_DIR
 
@@ -3187,6 +3409,9 @@ move_mountpoints() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 mountpoint_list() {
     local dev mp other ret=1
 
@@ -3200,6 +3425,9 @@ Read_Mounts
     return $ret
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 final_umount() {
     local mp list i
     move_mountpoints
@@ -3215,6 +3443,9 @@ final_umount() {
     return 1
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 safe_shutdown() {
     local cmd=$1  ask=$2
 
@@ -3261,6 +3492,9 @@ _yes_no() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 my_select() {
     local title=$1  var=$2  width=${3:-0}  default=$4
     shift 4
@@ -3281,6 +3515,9 @@ my_select() {
     my_select_2 "$title" $var "$default" "$data" "$display"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 my_select_2() {
     local title=$1  var=$2  default=$3  data=$4  display=$5
     local def_prompt=$(printf  "$_Press_X_for_the_default_selection_" "$(cq  "$_enter_")")
@@ -3338,6 +3575,9 @@ initialize_cmdline2() {
     fi
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 my_select_menu() {
     local dir=$BOOT_MENU_DIR do_menu=$DO_MENUS
     unset MENU_VALUE
@@ -3409,6 +3649,9 @@ read_menu_file() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 rpad() {
     local width=$1  str=$2
     local pad=$((width - $(echo $str | wc -m)))
@@ -3416,6 +3659,9 @@ rpad() {
     printf "%s%${pad}s" "$str" ""
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 get_default_label() {
     local fields=$1 file=$2
     local cheat=$(extract_from_cmdline "$fields")
@@ -3424,6 +3670,9 @@ get_default_label() {
     echo ${value:-$cheat}
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 extract_from_cmdline() {
     local p fields=$1
     [ "$fields" ] || return
@@ -3434,6 +3683,9 @@ extract_from_cmdline() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 filter_cmdline() {
     local p fields=$1
     shift
@@ -3451,6 +3703,9 @@ filter_cmdline() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 xlat_mfile() {
     local file=$1 lang=${2%%_*}
     echo "xlat_mfile: $lang $file" >> /mfile.log
@@ -3462,6 +3717,9 @@ xlat_mfile() {
     echo $file
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 do_early_menus() {
     local BOOT_MENU_DIR=/live/menus
     local MENU_VALUE BOOT_MENU_WARN=true
@@ -3503,6 +3761,9 @@ do_early_menus() {
     [ ${#cmdline} -gt 0 ] && echo "$cmdline" >> /live/config/cmdline
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 do_late_menus() {
     local BOOT_MENU_DIR=/live/aufs/usr/local/share/boot-menus
     local BOOT_MENU_WARN=
@@ -3520,6 +3781,9 @@ do_late_menus() {
     [ ${#cmdline} -gt 0 ] && echo "$cmdline" >> /live/config/cmdline
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 size_label_m() { _size_label $1   "M G T" ;}
 size_label_k() { _size_label $1 "K M G T" ;}
 
@@ -3540,6 +3804,9 @@ _size_label() {
     echo "$size$unit"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 select_device() {
     local title_type=$1  var=$2  min_size=${3:-0} not_mounted=$4
     local title=$(printf  "$_Please_select_X_device_" "$title_type")
@@ -3688,6 +3955,9 @@ sorted_blkid() {
         | sed -e 's/^sd.[0-9][0-9]+//' -e 's/://'
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 label_device() {
     local dev=$1  new=$2
     local type=$(device_fstype $dev)
@@ -3733,6 +4003,9 @@ label_device() {
     msg  "$_Label_updated_to_X_" $(pq $new)
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 label_to_dev() {
     local label=$1 devices
     local dev line lab
@@ -3745,18 +4018,24 @@ EOT
     echo $devices
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 uuid_to_dev() {
-    local uuid=$1 devices
+    local uuid=$1  grep_for=${2:-.} devices
     local dev line id
     while read dev line; do
         id=$(echo "$line" | sed -n -r 's/(^|.* )UUID="([^"]*)"( |$).*/\2/p')
         [ ${#id} -gt 0 -a -z "${id##$uuid}" ] && devices="$devices${devices:+ }${dev%:}"
     done <<EOT
-$(blkid)
+$(blkid | grep "$grep_for")
 EOT
     echo $devices
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 cleanse_dev() {
     case $1 in
         /dev/*)  [ -b "$1"      ] && echo "$1";;
@@ -3766,6 +4045,9 @@ cleanse_dev() {
     esac
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 general_device_error() {
     case $2 in
         uuid|label) label_error  "$@" ;;
@@ -3773,6 +4055,9 @@ general_device_error() {
     esac
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 label_error() {
     local find_type=$1  param=$2  name=$2  value=$3
     [ "$param" = label ] && param=lab
@@ -3805,6 +4090,9 @@ Label_Error
     esac
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 device_error() {
     local find_type=$1  type=$2  value=$3
     local valid_devs=$(echo $(most_block_devices) | sed "s/^/$white    /");
@@ -3815,6 +4103,9 @@ device_error() {
     fi
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 cp_file() {
     local src=$1  name=$2  dest=$3  file=$1/$2
     mkdir -p $dest
@@ -3850,6 +4141,9 @@ cp_rm_dest() {
     cp "$src" "$dest"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 find_md5_files() {
     local dir=$1  ; shift
     local file
@@ -3859,6 +4153,9 @@ find_md5_files() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 prog_copy_md5() {
     local dest=$1  src=$2 ; shift 2
     prog_copy $dest $(find_md5_files $src "$@")
@@ -3992,6 +4289,9 @@ cp_dir() {
     time_cmd cp -a $from/* $to
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 old_cp_dir() {
     mkdir -p "$2"
     echo -n $hi_co
@@ -4017,6 +4317,9 @@ file_usage_m() {
     du -scxm $list | tail -n 1 | cut -f1
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 copy_files_md5() {
     local f file sorc=$1  dest=$2
     shift 2
@@ -4030,6 +4333,9 @@ copy_files_md5() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 copy_files() {
     local f file sorc=$1  dest=$2
     shift 2
@@ -4048,9 +4354,11 @@ avail_space()    { $LIVE_BIN/df -Pm "$1" | awk '{size=$4}END{print size}' ;}
 du_size()        { du -scm "$@"         | tail -n1 | cut -f1             ;}
 get_mountpoint() { grep "^$1 " /proc/mounts | cut -d" " -f2              ;}
 
+#------------------------------------------------------------------------------
 # This compensates for sparse rootfs and homefs files one directory down from
 # the mountpoint.  This is far from perfect but I hope it is a reasonable
 # compromise that will work well for most people in most situations.
+#------------------------------------------------------------------------------
 free_space() {
     local mp=$1
     local free=$($LIVE_BIN/df -Pm $mp | awk '{size=$4}END{print size}')
@@ -4067,6 +4375,9 @@ free_space() {
     echo $free
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 dir_has_param() {
     local dir=$1  want_param=$2
 
@@ -4224,6 +4535,9 @@ check_md5()
     vmsg 2 $tbar
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 do_delay() {
     local cnt=$1; shift
     [ -z "$cnt" -o "$cnt" = "0" ] && return
@@ -4236,6 +4550,9 @@ do_delay() {
     msg
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 next_device() {
     local base=$(echo $1 | sed 's/[0-9]*$//')
     local num=$(echo $1 | sed 's/^[^0-9]*//')
@@ -4249,6 +4566,9 @@ next_device() {
     return 1
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 will_remaster() {
     [ -n "$NO_REMASTER" -o "$ROLLBACK" ] && return 1
 
@@ -4342,6 +4662,9 @@ do_remaster() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 most_block_devices() { find /dev -type b | egrep -v "/ram|/loop|/fd" ; }
 
 #------------------------------------------------------------------------------
@@ -4548,6 +4871,9 @@ prepare_persistence() {
 
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 mount_persist_device() {
     local persist_files=$1  from_persist=$2
 
@@ -4612,6 +4938,9 @@ mount_persist_device() {
 
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 create_persist_files() {
     local mp=$1 path=$2 dir=$1/$2 need_rootfs=$3  need_homefs=$4
     mount -o remount,rw $mp 2>/dev/null
@@ -4641,6 +4970,9 @@ create_persist_files() {
         && persist_makefs home $mp $dir homefs NEED_HOMEFS
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 persist_makefs() {
     local type=$1
     _persist_makefs "$@" && return
@@ -4786,6 +5118,9 @@ _persist_makefs() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 makefs() {
     local file=$1  fstype=$2  size=$3  part_fstype=$4  dir=$(dirname $file)
     mkdir -p $dir                                                             || return 1
@@ -4801,6 +5136,9 @@ makefs() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 default_makefs_size() {
     local avail=$1  size=$3  params
     eval params=\$$2
@@ -4814,6 +5152,9 @@ default_makefs_size() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 select_persist_device() {
     local device label=$1
     warn
@@ -4833,6 +5174,9 @@ select_persist_device() {
     return $ret
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 fsck_persist_dev() {
     local persist_files=$1; shift
     [ "$persist_files" ] || return
@@ -4858,6 +5202,9 @@ _fsck_persist_dev() {
     return 1
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 mount_and_copy_rootfs() {
     if _mount_and_copy_rootfs "$@"; then
         PERSIST_ROOT=true
@@ -4927,6 +5274,9 @@ copy_persist_to_ram() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 mount_persist_file() {
     local file=$1  mpnt=$2  type=$3  want=$4  need=$5
 
@@ -5027,6 +5377,9 @@ mount_homefs() {
     fi
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 offer_copy_home_dir() {
     local real=$1  temp=$2
 
@@ -5054,6 +5407,9 @@ offer_copy_home_dir() {
     # FIXME:  Then offer to erase if extra not in linuxfs?
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 empty_dir() {
     local dir=$1
     local cnt=$(ls "$dir" | grep -v "^lost+found$" | wc -l)
@@ -5123,6 +5479,9 @@ copy_homefs() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 auto_login() {
     local dir file full prog=$1  terms=$2 root=$3
     [ -n "$prog" -a -n "$terms" ] || return
@@ -5159,6 +5518,9 @@ page_updown_keys() {
     sed -i "/history-search/ s/^#\s*//" $file
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 fancy_prompt() {
     local prompt=${1:-prompt-fancy}  dir=$2
     local bashrc=$dir/etc/skel/.bashrc  fp_prog=/usr/local/bin/fancy-prompts.bash
@@ -5188,6 +5550,9 @@ Fancy_Stuff
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 copy_xtra() {
     local dir bdir=$1 xtra_dir=$1/xtra tarball=$1/xtra.tgz
 
@@ -5209,6 +5574,9 @@ copy_xtra() {
     msg
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 delete_files() {
     local bdir=$1
     local dfile=$bdir/delete.list
@@ -5218,6 +5586,9 @@ delete_files() {
     rm -rf $(grep -v "^\s*#" $dfile | sed "s=^\s*/=$NEW_ROOT/=" | grep "/[a-z]")
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 ld_path_which() {
     local xdir prog=$1
     for xdir in /sbin /bin /usr/sbin /usr/bin /usr/local/bin; do
@@ -5228,6 +5599,9 @@ ld_path_which() {
     return 1
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 ld_path() {
     local xdir found prog=$1
 
@@ -5239,19 +5613,25 @@ ld_path() {
     fi
 
     shift
-    LD_LIBRARY_PATH=$LD_PATH $LD_ROOT_DIR$prog "$@"
+    LD_LIBRARY_PATH=$LD_PATH $SET_ARCH $LD_ROOT_DIR$prog "$@"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 prep_ld_path() {
     local ld_path arch=$(uname -m)  dir=${1:-$SQFS_MP}
 
     LD_ROOT_DIR=$dir
 
+    SET_ARCH=
     case $arch in
           x86_64) prep_lib64 $dir
-                  ld_path=$LIVE_X64_LD_PATH ;;
+                  ld_path=$LIVE_X64_LD_PATH
+                  SET_ARCH=linux64           ;;
 
-        i[3-8]86) ld_path=$LIVE_386_LD_PATH ;;
+        i[3-8]86) ld_path=$LIVE_386_LD_PATH
+                  SET_ARCH=linux32           ;;
 
                *) warn 'unknown architecture %s. Assuming %s' $(pqw $arch) $(pqw i686)
                   ld_path=$LIVE_386_LD_PATH;;
@@ -5262,6 +5642,9 @@ prep_ld_path() {
     vmsg 8 "LD_PATH: $LD_PATH"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 prep_lib64() {
     local dir=$1
     mkdir -p /lib64
@@ -5273,6 +5656,9 @@ prep_lib64() {
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 mountpoints_under() {
     local dev mp other ret=1 dir=$1
 
@@ -5287,6 +5673,9 @@ Read_Mounts
     return $ret
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 chroot_umount() {
     local mp list i  dir=${1:-$LD_ROOT_DIR}
 
@@ -5304,6 +5693,9 @@ chroot_umount() {
     return 1
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 confile() {
     local file dir=/live/config
     for file; do
@@ -5312,6 +5704,9 @@ confile() {
     return 1
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 write_output_files() {
     local dir=$1  out_file=$1/initrd.out
     mkdir -p $dir
@@ -5403,6 +5798,9 @@ Initrd_Out
     done
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 update_store_file() {
     local disable=$1  enable=$2
     [ "$REMASTERABLE" ] || return
@@ -5418,6 +5816,9 @@ update_store_file() {
     fi
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 write_log_files() {
     local my_log=$1 final_log=$2 e=$(printf "\e")
     mkdir -p $(dirname $final_log)
@@ -5425,6 +5826,9 @@ write_log_files() {
     cp $my_log $final_log.color
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 find_init_prog() {
     local d prog  full_prog prog_var=$1  dir=$2
     eval prog=\$$prog_var
@@ -5449,6 +5853,9 @@ find_init_prog() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 run_init_scripts() {
     local new_root=$1; shift
 
@@ -5458,7 +5865,7 @@ run_init_scripts() {
     for script; do
         full=/live/etc/init.d/$script
         test -x $new_root/$full || continue
-        chroot $new_root $full start
+        $SET_ARCH chroot $new_root $full start
         [ "$DB_PLUS" ] || continue
         now=$(get_time)
         vmsg 8 "%25s @ %s seconds" $script $(pq $(get_seconds $((now - last_time))))
@@ -5484,6 +5891,9 @@ update_file() {
     cp -a $src $dest
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 detect_old_persist_scripts() {
     local root=$1
     local lib_file=$root/usr/local/lib/antiX/antiX-common.sh
@@ -5500,6 +5910,9 @@ detect_old_persist_scripts() {
     return 1
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 late_umount() {
     local dev=$1
 
@@ -5533,9 +5946,12 @@ late_umount() {
 
     # If this was the encrypted device then close the mapping
     [ "$dev" = "$CRYPT_DEV" ] || return
-    log_cmd chroot /live/aufs /sbin/cryptsetup close "$LUKS_NAME"
+    log_cmd $SET_ARCH chroot /live/aufs /sbin/cryptsetup close "$LUKS_NAME"
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 write_ntfs_pids() {
     local file=$1  ntfs_pids=$(pgrep ntfs-3g)
     [ "$ntfs_pids" ] || return
@@ -5543,6 +5959,9 @@ write_ntfs_pids() {
     echo "$ntfs_pids" > $file
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 prepare_switch_root() {
     local new_root=$1  live_dir=$2  final_live=$3
     local new_live=$new_root${final_live:-$live_dir}
@@ -5618,6 +6037,9 @@ prepare_switch_root() {
     (cd $new_root && mkdir -p sys proc dev/pts)
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
 live_param_filter() { echo $*; }
 
 #==============================================================================

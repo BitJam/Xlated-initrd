@@ -74,7 +74,7 @@ do_stop() {
 
     test -e /live/config/remasterable || exit 0
 
-    echo_script "$_Disable_live_usb_Storage_" $0
+    echo_script "$_Disabling_live_usb_storage_" $0
 
     read_cmdline
 
