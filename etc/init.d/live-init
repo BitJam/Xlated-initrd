@@ -702,7 +702,7 @@ scale_conky() {
     local file=/$home/.conkyrc  def_width=180  def_gheight=30
     [ "$dpi" ] || return
     test -w $file || return
-    head $file | grep -iq "^#[[:space:]]*Standard[[:space:]]*antiX[[:space:]].conkyrc" || return
+    head $file | egrep -iq "^\s*(#|--+)\s*Standard\s*antiX\s*.conkyrc" || return
 
     local width=$((dpi * $def_width / 96 ))
     # Don't make conky smaller than the default size
@@ -712,9 +712,10 @@ scale_conky() {
     fi
     echo_live "$_Setting_Conky_width_to_X_" $(pquote $width)
     local gwidth=$((width - 10))
-    local gheight=$((2 * dpi * $def_gheight / 96 - $def_gheight))
+    local gheight=$((dpi * def_gheight / 96))
 
-    su -c "sed -i -r -e 's/^\s*(maximum_width\s+).*/\1$width/' \
+    su -c "sed -i -r -e 's/^\s*(maximum_width\s+)[0-9].*/\1$width/' \
+        -e 's/^(\s*maximum_width\s*=\s*)[0-9]+,.*/\1$width,/'  \
         -e 's/(graph\s+([a-z0-9]+\s+)?)[0-9]+\s*,\s*[0-9]+/\1$gheight,$gwidth/' $file" $user
 }
 
