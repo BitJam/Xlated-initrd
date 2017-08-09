@@ -22,8 +22,8 @@ export PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin
  FOUND_VDRIVER=
  VERSION_FILES="/etc/antix-version /live/boot-dev/version"
 
-ALL_VIDEO_MODULES="ast|bochs[_-]drm|cirrus|emgd|gma500[_-]gfx|i810|i915|mga|mgag200|nouveau|nvidia|qxl|r128|radeon|savage|sis|sis[_-]agp|tdfx|vboxvideo|via|via[_-]agp|vmwgfx"
-KMS_VIDEO_MODULES="ast|bochs[_-]drm|cirrus|emgd|gma500[_-]gfx|i915|mgag200|nouveau|nvidia|qxl|radeon|udl|vboxvideo|vmwgfx"
+ALL_VIDEO_MODULES="amdgpu|ast|bochs[_-]drm|cirrus|emgd|gma500[_-]gfx|i810|i915|mga|mgag200|nouveau|nvidia|qxl|r128|radeon|savage|sis|sis[_-]agp|tdfx|vboxvideo|via|via[_-]agp|vmwgfx"
+KMS_VIDEO_MODULES="amdgpu|ast|bochs[_-]drm|cirrus|emgd|gma500[_-]gfx|i915|mgag200|nouveau|nvidia|qxl|radeon|udl|vboxvideo|vmwgfx"
 SISIMEDIA_K_DRIVERS="sis|sis[_-]agp"
 XORG_DRIVER_DIR="/usr/lib/xorg/modules/drivers"
 
@@ -91,7 +91,6 @@ automount=off|amnt=off)                          AUTOMOUNT_OFF=true ;;
              noskylake)    NO_SKYLAKE=true                          ;;
                  issue)   FORCE_ISSUE=true                          ;;
              vboxdecor)    VBOX_DECOR=true                          ;;
-
     esac
 done
 
@@ -135,6 +134,9 @@ do_start() {
 
     write_issue_file "$DISTRO" "$FORCE_ISSUE"
 
+    # FIXME: this should be conditional
+    #disable_ipv6
+
     which X &>/dev/null && HAVE_X=true
 
     local alt_automount
@@ -150,7 +152,7 @@ do_start() {
 
     local dpi DPI_OUT
 
-    # Always create keyboard file in non-perisistent system even with no X
+    # Always create keyboard file in non-persistent system even with no X
     # Unless NO_LOAD_KEYS
     [ -z "$NO_LOAD_KEYS" ] && set_keyboard
     set_utc_local $CMD_CLOCK
@@ -181,11 +183,7 @@ If_File
     # Only do X stuff on systems that seem to have X
     if  [ "$HAVE_X" ]; then
 
-        if [ "$EARLY_VID" ]; then
-            load_video_driver
-        else
-            detect_any_video_driver
-        fi
+        detect_any_video_driver
 
         if [ ${#FONT_SIZE} -gt 0 ]; then
             font_size_to_dpi $FONT_SIZE
@@ -233,10 +231,13 @@ If_File
     #localize_firefox $LANG
 }
 
-
-#-------------------------------------------------------------------------------
+#===============================================================================
 # FSTAB stuff
-#-------------------------------------------------------------------------------
+#===============================================================================
+
+#------------------------------------------------------------------------------
+# Create fstab file.  Also enable automount stuff on antiX
+#------------------------------------------------------------------------------
 create_fstab() {
     local distro=$1 alt_automount=$2
 
@@ -247,11 +248,18 @@ create_fstab() {
     esac
 }
 
+#------------------------------------------------------------------------------
+# Create an fstab that only has swap entries
+#------------------------------------------------------------------------------
 add_fstab_swap() {
     echo_live 'Possibly adding swap partitions to fstab'
     make-fstab --quiet --swap-only
 }
 
+#------------------------------------------------------------------------------
+# Configure automounting and automatically adding fstab entries based on the
+# make-fstab program.
+#------------------------------------------------------------------------------
 automount_and_fstab() {
 
     local alt_automount=$1
@@ -351,9 +359,8 @@ automount_and_fstab() {
     esac
 }
 
-
 #-------------------------------------------------------------------------------
-# Misc. Customizations
+# Localize files under /etc/skel based on the language set by the user
 #-------------------------------------------------------------------------------
 localize_skel() {
     local lang=$1
@@ -385,6 +392,9 @@ localize_skel() {
     done
 }
 
+#------------------------------------------------------------------------------
+# Set default X keyboard settings based on language or cheats
+#------------------------------------------------------------------------------
 set_keyboard() {
     local kb_file=/etc/default/keyboard
     local default_xkb_opts="grp:alt_shift_toggle,terminate:ctrl_alt_bksp,grp_led:scroll"
@@ -405,6 +415,9 @@ XKBOPTIONS="${XKBOPTIONS:=$default_xkb_opts}"
 Keyboard_Out
 }
 
+#------------------------------------------------------------------------------
+# Set the Debian and antiX/MX repo locations based on timezone
+#------------------------------------------------------------------------------
 localize_repo() {
     local mirror=$1  tz=$2  lang_mirror=$3  lang_tz=$4
 
@@ -444,6 +457,9 @@ localize_repo() {
     localize-repo --quiet $args
 }
 
+#------------------------------------------------------------------------------
+# Tell system that hardware clock is set to either UTC or to localtime.
+#------------------------------------------------------------------------------
 set_utc_local() {
     local new=$1 file=/etc/adjtime
     [ "$new" ] || return
@@ -461,31 +477,19 @@ set_utc_local() {
     esac
 }
 
-set_etc_desktop_delay() {
-    local delay=$1
-    [ ${#delay} -gt 0 ] || return
-    local ds_conf=/etc/desktop-session/desktop-session.conf
-    test -e $ds_conf || return
-    local bad=$(echo $delay | sed -r 's/^([0-9]+(\.[0-9]*)?|.[0-9]+)//')
-
-    if [ ${#bad} -gt 0 ]; then
-        error "$_Bad_desktop_delay_parameter_X_" $(pquote $delay)
-        return
-    fi
-    echo_live "$_Setting_desktop_delay_to_X_" $(pquote $delay)
-    sed -r -i "s/^\s*(STARTUP_DELAY=).*/\1$delay/" $ds_conf
-}
-
-#-------------------------------------------------------------------------------
+#===============================================================================
 # XORG and VIDEO stuff
-#-------------------------------------------------------------------------------
-
+#===============================================================================
+#------------------------------------------------------------------------------
+# Create an xorg.conf file to use vesa driver (instead of the default fbdev
+# driver) if we don't detect a KMS video driver.
+#
 # Don't make a default xorg.conf if:
 #    1) a modified xorg.conf is found
 #    2) "noxorg" was specified
 #    3) any video driver was found (regardless of "nomodeset")
 #    4) we are in Virtual Box
-
+#------------------------------------------------------------------------------
 make_xorg_conf() {
     local args=$1  found_vdriver=$2  found_kms_driver=$3  no_xorg=$4
     local safe_mode xorg_conf=/etc/X11/xorg.conf
@@ -493,14 +497,6 @@ make_xorg_conf() {
     case ,$args, in
         *,safe,*) safe_mode=true ;;
     esac
-    #- # Disable fbdev unless it is specifically requested
-    #- # If it is requested then make sure it is enabled (by us at least)
-    #- local fbdev=/usr/lib/xorg/modules/drivers/fbdev_drv.so
-    #- local fbdev2=/usr/local/lib/xorg/fbdev_drv.so
-    #- case ,$args, in
-    #-     *,fbdev,*)  move_if $fbdev2 $fbdev ;;
-    #-             *)  move_if $fbdev $fbdev2 ;;
-    #- esac
 
     # Always erase generated xorg.conf files
     if test -f $xorg_conf && grep -q "^#\s*Generated by\s*make-xorg-conf" $xorg_conf; then
@@ -540,7 +536,7 @@ make_xorg_conf() {
         rm -f $SKYLAKE_FLICKER_FILE
     fi
 
-    [ "$FOUND_i915" -a -z "$no_xorg" ]    && fix_intel $args
+    [ "$FOUND_i915" -a -z "$no_xorg" ] && fix_intel $args
     args=$ARGS_OUT
 
     [ "$args" ] || return
@@ -550,6 +546,10 @@ make_xorg_conf() {
     /sbin/make-xorg-conf --output=$xorg_conf $args
 }
 
+#------------------------------------------------------------------------------
+# Tweak the acceleration for i915 graphics drivers.   This works around bugs
+# in the driver.
+#------------------------------------------------------------------------------
 fix_intel() {
     local args=$1
 
@@ -577,17 +577,26 @@ fix_intel() {
     ARGS_OUT=$args
 }
 
+#------------------------------------------------------------------------------
+# Is this an Intel skylake cpu?
+#------------------------------------------------------------------------------
 is_skylake() {
     # See recent pci.ids from http://pci-ids.ucw.cz/
     lspci -n | cut -d" " -f3 | egrep -q "^8086:($SKYLAKE_PCI_ID)"
     return $?
 }
 
+#------------------------------------------------------------------------------
+# Is this an Intel broadwell cpu?
+#------------------------------------------------------------------------------
 is_broadwell() {
     lspci -n | cut -d" " -f3 | egrep -q "^8086:($BROADWELL_PCI_ID)"
     return $?
 }
 
+#------------------------------------------------------------------------------
+# Which Intel cpus need to use uxa acceleration
+#------------------------------------------------------------------------------
 need_uxa() {
     local pci_id_regex=$(echo $UXA_PCI_ID | tr '\n' '|')
 
@@ -595,6 +604,10 @@ need_uxa() {
     return $?
 }
 
+#------------------------------------------------------------------------------
+# Get a list of video modules that are supported by this hardware (and are
+# enabled by the kernel)
+#------------------------------------------------------------------------------
 find_video_modules() {
     local modules=${1:-$ALL_VIDEO_MODULES}
     find /sys/devices -name modalias -print0 | xargs -0 sort -u \
@@ -605,10 +618,13 @@ find_video_modules() {
     # echo sis-agp
 }
 
+#------------------------------------------------------------------------------
+# Fix the console flickering problem on some skylake cpus
+#------------------------------------------------------------------------------
 skylake_flicker_fix() {
     local file=$1
     echo_live "$_Creating_file_X_" $(pquote $file)
-    cat<<Skylake_Fix > $file
+    cat > $file <<Skylake_Fix
 #-----------------------------------------------------------------------------
 # fix flickering on skylake hardware with some kernels -----------------------
 #-----------------------------------------------------------------------------
@@ -622,54 +638,11 @@ options i915 enable_rc6=0
 Skylake_Fix
 }
 
-
-set_fbcondecor() {
-    local boot_param=$1 orig_name=$2 param verbose theme=default new_name
-    #[ "$orig_name"  ] || return
-    [ "$boot_param" ] || return
-
-    # Don't set the decoration if the framebuffer has not changed
-    read new_name= 2>/dev/null < /sys/class/graphics/fb0/name
-    [ "$orig_name" = "$new_name" ] && return
-
-    for param in $(echo $boot_param | sed "s/,/ /g"); do
-        case $param in
-            v|verbose) verbose=true ;;
-          t=*|theme=*) theme=${param#*=} ;;
-        esac
-    done
-
-    # Only set bg if we are in verbose mode
-    [ "$verbose" ] || return
-    /sbin/splash-term $theme
-}
-
-load_video_driver() {
-    local orig_fb_name
-    read orig_fb_name 2</dev/null < /sys/class/graphics/fb0/name
-    echo_live "$_Scanning_for_hardware_specific_video_modules_"
-    local video_modules="$(find_video_modules)"
-    [ "$video_modules" ] || return
-
-    FOUND_VDRIVER=true
-    detect_sisimedia_driver "$video_modules"
-    FOUND_KMS_DRIVER="$(echo "$video_modules" | egrep "^($KMS_VIDEO_MODULES)$")"
-    FOUND_i915=$(echo $FOUND_KMS_DRIVER | grep "^i915$")
-
-    if [ "$FOUND_KMS_DRIVER" ]; then
-        echo_live "$_Found_X_video_module_s_Y_" KMS "$(pquote $(echo $FOUND_KMS_DRIVER))"
-        echo_live "$_Load_module_s_X_" "$(pquote $(echo $FOUND_KMS_DRIVER))"
-        modprobe -b -a -q "$FOUND_KMS_DRIVER"
-        set_fbcondecor "$SPLASH_PARAM" "$orig_fb_name"
-    else
-        echo_live "$_Found_video_module_s_X_" "$(pquote $(echo $video_modules))"
-        detect_sisimedia_driver "$video_modules"
-    fi
-}
-
+#------------------------------------------------------------------------------
 # Note: we will report FOUND_VDRIVER even if "nomodeset" is used because unless
 # the user wants safe mode then they should be allowed to use the KMS driver and
 # "nomodeset" without us forcing vesa.  That's what safe mode is for.
+#------------------------------------------------------------------------------
 detect_any_video_driver() {
     echo_live "$_Scanning_for_hardware_specific_video_modules_"
     local video_modules=$(find_video_modules)
@@ -682,15 +655,18 @@ detect_any_video_driver() {
         #. Found <KMS> video module(s) <module-name(s)>
         echo_live "$_Found_X_video_module_s_Y_" KMS "$(pquote $(echo $FOUND_KMS_DRIVER))"
         FOUND_i915=$(echo $FOUND_KMS_DRIVER | grep "^i915$")
+        #blacklist_radeon "$FOUND_KMS_DRIVER" "$XORG_ARGS"
     else
         echo_live "$_Found_X_video_module_s_Y_" "" "$(pquote $(echo $video_modules))"
         detect_sisimedia_driver "$video_modules"
     fi
 }
 
+#------------------------------------------------------------------------------
 # Note: we will report FOUND_VDRIVER even if "nomodeset" is used because unless
 # the user wants safe mode then they should be allowed to use the KMS driver and
 # "nomodeset" without us forcing vesa.  That's what safe mode is for.
+#------------------------------------------------------------------------------
 detect_kms_driver() {
     local kms_drivers=$(find_video_modules "$KMS_VIDEO_MODULES|drm_kms_helper")
     [ "$kms_drivers" ] || return
@@ -698,6 +674,10 @@ detect_kms_driver() {
     FOUND_VDRIVER=true
 }
 
+#------------------------------------------------------------------------------
+# Detect hardware support for sisimedia driver.  If it is found then set xorg
+# boot param so we create an xorg.conf file that uses that driver
+#------------------------------------------------------------------------------
 detect_sisimedia_driver() {
     local video_modules=$1  xorg_driver=sisimedia
     echo "$video_modules" | egrep -q "^($SISIMEDIA_K_DRIVERS)$" || return
@@ -714,6 +694,39 @@ detect_sisimedia_driver() {
     XORG_ARGS="${XORG_ARGS:-default,$xorg_driver}"
 }
 
+#------------------------------------------------------------------------------
+# NOT USED!
+# Blacklist radeon driver if amdgpu driver is supported and if the blacklist
+# file does not already exist
+#------------------------------------------------------------------------------
+blacklist_radeon() {
+    local drivers=$1  args=$2  bl_file=/etc/modprobe.d/blacklist-radeon.conf
+
+    case ,$args, in
+        *,radeon,*) return ;;
+    esac
+
+    #echo "$drivers" | grep -q "^amdgpu$" || return
+
+    test -e $bl_file && return
+
+    echo_live "$_Creating_file_X_" $(pquote $bl_file)
+
+    cat > $bl_file << Blacklist_Radeon
+# Created by the $DISTRO live initrd system around $(date +"%Y-%m-%d %H:%M")
+#
+# This file blacklists the radeon driver so the amdgpu driver becomes the default.
+# If you would prefer to use the radeon driver, comment out the following line:
+
+blacklist radeon
+Blacklist_Radeon
+}
+
+#------------------------------------------------------------------------------
+# Scale the height and width of conky to according to the dpi being used.  If
+# we don't do this then conky messes up because the font size gets scaled by
+# dpi but the height and width don't.
+#------------------------------------------------------------------------------
 scale_conky() {
     local dpi=${1%.*}  user=$2  home=$3
     local file=/$home/.conkyrc  def_width=180  def_gheight=30
@@ -736,6 +749,9 @@ scale_conky() {
         -e 's/(graph\s+([a-z0-9]+\s+)?)[0-9]+\s*,\s*[0-9]+/\1$gheight,$gwidth/' $file" $user
 }
 
+#------------------------------------------------------------------------------
+# Allow users to set dpi indirectly via a fontsize boot parameter
+#------------------------------------------------------------------------------
 font_size_to_dpi() {
     local size=$1
     local bad=$(echo $size | sed -r 's/^([0-9]+(\.[0-9]*)?|\.[0-9]+)//')
@@ -748,6 +764,9 @@ font_size_to_dpi() {
     DPI_OUT=$(awk "$begin{ printf \"%.0f\n\", $size * 96; }")
 }
 
+#------------------------------------------------------------------------------
+# DPI Sanity check
+#------------------------------------------------------------------------------
 check_dpi() {
     local dpi=$1
     [ "$dpi" ] || return 1
@@ -761,6 +780,9 @@ check_dpi() {
     return 0
 }
 
+#------------------------------------------------------------------------------
+# Set the dpi in slim conf files and in lightdm conf file
+#------------------------------------------------------------------------------
 set_server_dpi() {
     local dpi=$1
     [ ${#dpi} -gt 0 ] || return
@@ -777,6 +799,9 @@ set_server_dpi() {
     [ -e $file ] && sed -i -r "s/^#?\s*(xserver-command=X).*/\1 -dpi $dpi/" $file
 }
 
+#------------------------------------------------------------------------------
+# Set the dpi in the user's .Xresources file
+#------------------------------------------------------------------------------
 set_user_dpi() {
     local dpi=$1  user=$2  home=$3
 
@@ -788,6 +813,10 @@ set_user_dpi() {
     scale_conky "$dpi" "$user" $home
 }
 
+#------------------------------------------------------------------------------
+# Set the desktop delay used by desktop-session.  Hopefully, this code is no
+# longer needed.
+#------------------------------------------------------------------------------
 set_user_desktop_delay() {
     local delay=$1  user=$2  home=$3
     [ ${#delay} -gt 0 ] || return
@@ -804,6 +833,9 @@ set_user_desktop_delay() {
     su -c "sed -r -i 's/^\s*(STARTUP_DELAY=).*/\1$delay/' $ds_conf" $user
 }
 
+#------------------------------------------------------------------------------
+# Set automounting mode via users .desktop-session/automount.conf file (sigh)
+#------------------------------------------------------------------------------
 set_user_automount() {
     local  user=$1  home=$2  on=$3  off=$4
     local file=$home/.desktop-session/automount.conf
@@ -817,6 +849,9 @@ set_user_automount() {
     fi
 }
 
+#------------------------------------------------------------------------------
+# Set delay before consoles automatically blank (is this still working?)
+#------------------------------------------------------------------------------
 set_console_blanking() {
     local blank=$1  conf_file=/etc/kbd/config
     [ ${#blank} -gt 0 ] || return
@@ -827,6 +862,32 @@ set_console_blanking() {
     sed -ri "s/^(BLANK_TIME=).*/\1$blank/" $conf_file
 }
 
+#------------------------------------------------------------------------------
+# Disable ipv6 so ipv4 networking starts *much* faster
+# Does not solve the network delay problem, NOT USED
+#------------------------------------------------------------------------------
+disable_ipv6() {
+    local file=/etc/sysctl.d/disable-ipv6.conf  msg="Added by $DISTRO live initrd"
+    test -e $file && return
+    mkdir -p $(dirname $file)
+    cat > $file << Disable_Ipv6
+
+###################################################################
+# $msg
+# disable ipv6 networking to avoid long network delays
+#
+
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+net.ipv6.conf.lo.disable_ipv6 = 1
+Disable_Ipv6
+}
+
+#------------------------------------------------------------------------------
+# Write the /etc/issue file (which gets displayed at console login) according
+# to what this distro is and what programs (cli-installer antiX-cli-cc) are
+# available.
+#------------------------------------------------------------------------------
 write_issue_file() {
     local distro=${1:-Linux}  force=$2  file=${3:-/etc/issue}
     [ "$force" -o ! -e $file ] || return
@@ -855,6 +916,9 @@ write_issue_file() {
     ) > $file
 }
 
+#------------------------------------------------------------------------------
+# Convenience routine to colorize the issue file
+#------------------------------------------------------------------------------
 imsg() {
     local fmt=$1
     shift
@@ -874,6 +938,9 @@ find_def_user() {
     echo ${user%% *}
 }
 
+#------------------------------------------------------------------------------
+# Create the user's home directory and populate it from /etc/skel IF NEEDED!
+#------------------------------------------------------------------------------
 create_home() {
     local user=$1 home=$2
 
@@ -892,6 +959,10 @@ create_home() {
     chown -R $uid_gid $home
 }
 
+#------------------------------------------------------------------------------
+# On live-usb system we save the last deskop session on shutdown and then
+# restore it here.
+#------------------------------------------------------------------------------
 set_default_desktop() {
     local desktop=$1  user=$2  home=$3
     [ "$desktop" ] || return
@@ -902,6 +973,9 @@ set_default_desktop() {
     echo $desktop | su -c "tee $file" $user >/dev/null
 }
 
+#------------------------------------------------------------------------------
+# The user can select a desktop theme via the desktheme= cheat.
+#------------------------------------------------------------------------------
 set_desktop_theme() {
     local theme=$1  user=$2  home=$3
     [ "$theme" ] || return
@@ -911,26 +985,15 @@ set_desktop_theme() {
     su -c "set-desktop-theme --dir $home $theme" $user
 }
 
-#FIXME:
-localize_firefox() {
-    local pref_files file lang=$1
-    local string="user_pref(\"spellchecker.dictionary\","
-
-    pref_files=$(ls $FF_PREFS 2>/dev/null)
-    [ "$pref_files" ] || return
-    sed -i  "/$string/d" $pref_files
-    for file in $pref_files; do
-        echo "$string \"$lang\");" >> $file
-    done
-}
-
 #-------------------------------------------------------------------------------
 # UTILITIES
 #-------------------------------------------------------------------------------
 
+#------------------------------------------------------------------------------
 # Always copy to $file$ext2 so this has the most recent backup.
 # Only move to $file$ext1 if it does not already exist so this will
 # contain the earliest (oldest) backup.
+#------------------------------------------------------------------------------
 backup_file() {
     local file=$1 ext1=${2:-.old} ext2=${3:-save}
 
@@ -940,6 +1003,10 @@ backup_file() {
     mv -f $file $file$ext1
 }
 
+#------------------------------------------------------------------------------
+# Move f1 to f2 only if f1 exists and f2 does not exist.  Create f2 directory
+# if needed. NOT USED.
+#------------------------------------------------------------------------------
 move_if() {
     local f1=$1  f2=$2
     test -e $f1 || return
@@ -947,6 +1014,9 @@ move_if() {
     mv -f $f1 $f2
 }
 
+#------------------------------------------------------------------------------
+# Add a line to a file or edit an existing line.
+#------------------------------------------------------------------------------
 add_or_edit() {
     local where=$1  line=$2  file=$3  user=$4  create=$5
     if ! test -e "$file"; then
@@ -961,8 +1031,8 @@ add_or_edit() {
     su -c "sed -i '1 i$line' $file" $user
 }
 
-#-------------------------------------------------------------------------------
-#-------------------------------------------------------------------------------
+#==============================================================================
+#==============================================================================
 main "$@" 2>&1 | tee -a $INIT_LOG_FILE
 
 exit 0
