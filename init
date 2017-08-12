@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.10.03"
-           VERSION_DATE="Sun Jul 23 20:30:33 MDT 2017"
+                VERSION="8.10.06"
+           VERSION_DATE="Fri Aug 11 23:58:35 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -2607,6 +2607,7 @@ prep_seed_dev_random() {
     [ -z "$file" ]   && return
     test -e "$file"  || touch $file 2>/dev/null
     test -w "$file"  || return
+    # A random seed is used to start the random number generator differently each boot
     msg  "$_Saving_random_seed_"
     dd if=/dev/urandom bs=1 count=512 2>/dev/null > $file
     chmod 600 $file 2>/dev/null
@@ -4616,6 +4617,7 @@ do_remaster() {
         rm -rf $sqfile_path/xtra.bak $sqfile_path/xtra.bad
         for file in $SQFILE_NAME $MAKE_OLD; do
             full=$sqfile_path/$file
+            [ -e $full.bad -a -e $full.bak ] && log_cmd rm -rf $full.bak
             [ -e $full.bad ] && log_cmd mv -f $full.bad $full.bak
             [ -e $full     ] && log_cmd mv -f $full     $full.bad
             [ -e $full.old ] && log_cmd mv -f $full.old $full
@@ -4652,6 +4654,7 @@ do_remaster() {
     rm -rf $sqfile_path/xtra.old
     for file in $SQFILE_NAME $MAKE_OLD; do
         full=$sqfile_path/$file
+        [ -e $full -a -e $full.old ] && log_cmd rm -rf $full.old
         [ -e $full     ] && log_cmd mv -f $full $full.old
         [ -e $full.new ] && log_cmd mv -f $full.new $full
     done
