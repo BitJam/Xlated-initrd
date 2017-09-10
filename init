@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.10.08"
-           VERSION_DATE="Fri Aug 25 21:34:06 MDT 2017"
+                VERSION="8.10.14"
+           VERSION_DATE="Sun Sep 10 12:25:21 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -37,7 +37,7 @@
     FAILSAFE_BOOT_RETRY=30
 
     #DISABLE_SERVICES_OPTS="(c[0-9]+(\.[0-9]*)?|c\.[0-9]+|[ADLMPSWXacdgklmnNrsvwx])+"
-    DISABLE_SERVICES_OPTS="[aAdgklmnNPrsSvVwWx]+"
+    DISABLE_SERVICES_OPTS="[aAdgkilLmnNPrsSvVwWx]+"
 
            RW_MODE="ro"
        #DISTRO_NAME="Linux"
@@ -100,7 +100,7 @@
         SEED_FNAME=random-seed
 
         BLACK_LIST=
-   BLACK_LIST_FILE=/etc/modprobe.d/initrd.conf
+   BLACK_LIST_FILE=/etc/modprobe.d/live-initrd-blacklist.conf
  KMS_VIDEO_MODULES="ast,bochs-drm,cirrus,emgd,gma500_gfx,i915,mgag200,nouveau,qxl,radeon,udl,vmwgfx"
     DEFAULT_SQFILE=/antiX/linuxfs
   DEFAULT_ISO_FILE=/antiX/antiX.iso
@@ -285,6 +285,9 @@ main_wrapper() {
     done
     rm -f $rm_list
 
+    rm -f $NEW_ROOT$BLACK_LIST_FILE
+    [ -e $BLACK_LIST_FILE ] && cp $BLACK_LIST_FILE $NEW_ROOT$BLACK_LIST_FILE
+
     dmesg > $NEW_ROOT/live/config/dmesg.out
 
     breakpoint bash  "Bash shell right before starting init"
@@ -340,7 +343,7 @@ main_core() {
 
     mkdir -p $MOD_DIR
     depmod &>/dev/null
-    blacklist_modules $BLACK_LIST
+    blacklist_modules "$BLACK_LIST" "$BLACK_LIST_FILE"
 
     breakpoint 1 "before welcome"
 
@@ -507,23 +510,14 @@ main_core() {
 
     breakpoint 6 "after mounting aufs"
 
-    rm -f $NEW_ROOT$BLACK_LIST_FILE
-    [ -e $BLACK_LIST_FILE ] && cp $BLACK_LIST_FILE $NEW_ROOT$BLACK_LIST_FILE
-
     [ "$WANT_HOMEFS" ] \
         && mount_homefs $PERSIST_FULL_PATH/homefs $NEW_ROOT/home "$WANT_HOMEFS" "$NEED_HOMEFS"
 
-    [ "$DB_PLUS"       ] && local plus_t1=$(get_time)
-    [ "$DB_PLUS"       ] && page_updown_keys "$NEW_ROOT"
     [ "$DO_XTRA"       ] && copy_xtra    $DEFAULT_DIR
     [ "$DO_XTRA"       ] && delete_files $DEFAULT_DIR
     [ "$DO_AUTO_LOGIN" ] && auto_login   "$AUTO_LOGIN_PROG" "$AUTO_LOGIN_TERMS" "$NEW_ROOT"
     [ "$DO_FANCY"      ] && fancy_prompt "$FANCY_PROMPT" "$NEW_ROOT"
-    if [ "$DB_PLUS" ]; then
-        local plus_t2=$(get_time)
-        local delta=$(get_seconds $((plus_t2 - plus_t1)))
-        vmsg 8 "$green@${cyan} Extras took$hi_co $delta${cyan} seconds"
-    fi
+    [ "$DB_PLUS"       ] && page_updown_keys "$NEW_ROOT"
 
     # FIXME: do this after copy_xtra for easy testing (for now) (????)
     PROC_CMDLINE=$(cat /live/config/proc-cmdline)
@@ -838,157 +832,10 @@ read_cmdline_params()
         #----- Some known codes -------------------------
 
         [sS1-6]|BOOT_IMAGE=*);;
-        video.*);;
-
-        # Most kernel codes from version 3.8 (plus additions)
-        acpi_force_table_verification|acpi_no_auto_serialize|acpica_no_return_repair);;
-        forcepae|systemd.*);;
-        acpi=*|acpi_rsdp=*|acpi_apic_instance=*|acpi_backlight=*);;
-        acpi.debug_layer=*|acpi.debug_level=*|acpi_irq_balance);;
-        acpi_irq_nobalance|acpi_irq_isa=*|acpi_irq_pci=*|acpi_no_auto_ssdt);;
-        acpi_os_name=*|acpi_osi=*|acpi_pm_good|acpi_sci=*|acpi_serialize);;
-        acpi_skip_timer_override|acpi_sleep=*|acpi_use_timer_override);;
-        acpi_enforce_resources=*|add_efi_memmap|agp=*|ALSA|alignment=*);;
-        align_va_addr=*|amd_iommu=*|amd_iommu_dump=*|amijoy.map=*);;
-        analog.map=*|apc=*|apic=*|autoconf=*|show_lapic=*|apm=*|arcrimi=*);;
-        ataflop=*|atarimouse=*|atkbd.extra=*|atkbd.reset=*|atkbd.set=*);;
-        atkbd.scroll=*|atkbd.softraw=*|atkbd.softrepeat=*|baycom_epp=*);;
-        baycom_par=*|baycom_ser_fdx=*|baycom_ser_hdx=*|boot_delay=*);;
-        bootmem_debug|bttv.card=*|bttv.radio=*|bttv.pll=*|bttv.tuner=*);;
-        bulk_remove=*|c101=*|cachesize=*|ccw_timeout_log|cgroup_disable=*);;
-        checkreqprot|cio_ignore=*|clock=*|clocksource=*|clearcpuid=*|cma=*);;
-        cmo_free_hint=*|coherent_pool=*|code_bytes|com20020=*|com90io=*);;
-        com90xx=*|condev=*|conmode=*|console=*|consoleblank=*);;
-        coredump_filter=*|cpuidle.off=*|cpcihp_generic=*|crashkernel=*);;
-        cs89x0_dma=*|cs89x0_media=*|dasd=*|db9.dev[23]=*|ddebug_query=*|debug);;
-        debug_locks_verbose=*|debug_objects|no_debug_objects);;
-        debug_guardpage_minorder=*|debugpat|decnet.addr=*);;
-        default_hugepagesz=*|dhash_entries=*|digi=*|digiepca=*|disable=*);;
-        disable_ddw|disable_ipv6=*|disable_mtrr_cleanup|disable_mtrr_trim);;
-        disable_timer_pin_1|dma_debug=*|dma_debug_entries=*);;
-        dma_debug_driver=*|drm_kms_helper.edid_firmware=*|dscc4.setup=*);;
-        dyndbg|dyndbg=*|module.dyndbg|module.dyndbg=*|earlycon=*);;
-        earlyprintk=*|ekgdboc=*|edd=*|eisa_irq_edge=*|elanfreq=*|elevator=*);;
-        elfcorehdr=*|enable_mtrr_cleanup|enable_timer_pin_1|enforcing);;
-        erst_disable|ether=*|evm=*|failslab=*|fail_page_alloc=*);;
-        fail_make_request=*|floppy=*|force_pal_cache_flush|ftrace=*);;
-        ftrace_dump_on_oops|ftrace_dump_on_oops=*|ftrace_filter=*);;
-        ftrace_notrace=*|ftrace_graph_filter=*|gamecon.map[23]=*|gamma=*);;
-        gart_fix_e820=*|gcov_persist=*|gpt|grcan.enable0=*|grcan.enable1=*);;
-        grcan.select=*|grcan.txsize=*|grcan.rxsize=*|hashdist=*|hcl=*|hd=*);;
-        hest_disable|highmem=*|highres=*|hisax=*|hlt|hpet=*|hugepages=*);;
-        hugepagesz=*|hvc_iucv=*|hvc_iucv_allow=*|keep_bootcon|i2c_bus=*);;
-        i8042.debug|i8042.direct|i8042.dumbkbd|i8042.noaux|i8042.nokbd);;
-        i8042.noloop|i8042.nomux|i8042.nopnp|i8042.notimeout|i8042.reset);;
-        i8042.unlock|i810=*|i8k.ignore_dmi|i8k.force|i8k.power_status);;
-        i8k.restricted|i915.invert_brightness=*|icn=*|ide-core.nodma=*);;
-        ide-pci-generic.all-generic-ide|idle=*|ignore_loglevel);;
-        ihash_entries=*|ima_appraise=*|ima_appraise_tcb|ima_audit=*);;
-        ima_hash=*|ima_tcb|init=*|initcall_debug|initrd=*|inport.irq=*);;
-        intel_iommu=*|intel_idle.max_cstate=*|intremap=*|iomem=*|iommu=*);;
-        io7=*|io_delay=*|ip=*|ip2=*|irqfixup|irqpoll|isapnp=*|isolcpus=*);;
-        iucv=*|js=*|keepinitrd|kernelcore=*|kgdbdbgp=*|kgdboc=*|kgdbwait);;
-        kmac=*|kmemleak=*|kstack=*|kvm.ignore_msrs=*|kvm.mmu_audit=*);;
-        kvm-amd.nested=*|kvm-amd.npt=*|kvm-intel.ept=*);;
-        kvm-intel.emulate_invalid_guest_state=*|kvm-intel.flexpriority=*);;
-        kvm-intel.nested=*|kvm-intel.unrestricted_guest=*|kvm-intel.vpid=*);;
-        l2cr=*|l3cr=*|lapic|lapic=*|lapic_timer_c2_ok|libata.dma=*);;
-        libata.ignore_hpa=*|libata.noacpi|libata.force=*|memblock=*);;
-        load_ramdisk=*|lockd.nlm_grace_period=*|lockd.nlm_tcpport=*);;
-        lockd.nlm_timeout=*|lockd.nlm_udpport=*|logibm.irq=*|loglevel=*);;
-        log_buf_len=*|logo.nologo|lp=*|lpj=*|ltpc=*|machvec=*|machtype=*);;
-        max_addr=*|maxcpus=*|max_loop=*|mce|mce=*|md=*);;
-        mdacon=*|mem=*|memchunk=*|memmap=*|memory_corruption_check=*);;
-        memory_corruption_check_size=*|memory_corruption_check_period=*);;
-        memtest=*|meye.*=*|mfgpt_irq=*|mfgptfix|mga=*|min_addr=*|mini2440=*);;
-        mminit_loglevel=*|module.sig_enforce|mousedev.tap_time=*);;
-        mousedev.xres=*|mousedev.yres=*|movablecore=*|MTD_Partition=*);;
-        MTD_Region=*|mtdparts=*|multitce=*|onenand.bdry=*|mtdset=*);;
-        mtouchusb.raw_coordinates=*|mtrr_chunk_size=*|mtrr_gran_size=*);;
-        mtrr_spare_reg_nr=*|n2=*|netdev=*|nf_conntrack.acct=*|nfsaddrs=*);;
-        nfsroot=*|nfsrootdebug|nfs.callback_tcpport=*|nfs.cache_getent=*);;
-        nfs.cache_getent_timeout=*|nfs.idmap_cache_timeout=*);;
-        nfs.enable_ino64=*|nfs.max_session_slots=*);;
-        nfs.nfs4_disable_idmapping=*|nfs.nfs4_unique_id=*);;
-        nfs.send_implementation_id|nfsd.nfs4_disable_idmapping=*);;
-        objlayoutdriver.osd_login_prog=*|nmi_debug=*|nmi_watchdog=*);;
-        netpoll.carrier_timeout=*|no387|no_console_suspend|noaliencache);;
-        noalign|noapic|noautogroup|nobats|nocache|noclflush|nodelayacct);;
-        nodisconnect|nodsp|noefi|noexec|nosmap|nosmep|noexec32|nofpu|nofxsr);;
-        noxsave|eagerfpu=*|nohlt|no-hlt|no_file_caps|nohalt|nohz=*|noiotrap);;
-        noirqdebug|no_timer_check|noisapnp|noinitrd|nointremap|nointroute);;
-        nojitter|no-kvmclock|no-kvmapf|no-steal-acc|nolapic|nolapic_timer);;
-        noltlbs|nomca|nomce|nomfgpt|nonmi_ipi|nomodule|nopat|norandmaps);;
-        noreplace-paravirt|noreplace-smp|noresidual|nordrand|noresume);;
-        no-scroll|nosbagart|nosep|nosmp|nosoftlockup|nosync|notsc|nousb);;
-        nowatchdog|nowb|nox2apic|cpu0_hotplug|nptcg=*|nr_cpus=*|nr_uarts=*);;
-        numa_balancing=*|numa_zonelist_order=*|ohci1394_dma=*);;
-        olpc_ec_timeout=*|omap_mux=*|oprofile.timer=*|oprofile.cpu_type=*);;
-        oops=*|OSS|panic=*|parkbd.port=*|parkbd.mode=*|parport=*);;
-        parport_init_mode=*|pause_on_oops=*|pcbit=*|pcd.|pci=*|pcie_aspm=*);;
-        pcie_hp=*|pcie_ports=*|pcie_pme=*|pcmv=*|pd.|pdcchassis=*);;
-        percpu_alloc=*|pf.|pg.|pirq=*|plip=*|pmtmr=*|pnp.debug=*|pnpacpi=*);;
-        pnpbios=*|pnp_reserve_irq=*|pnp_reserve_dma=*|pnp_reserve_io=*);;
-        pnp_reserve_mem=*|ports=*|print-fatal-signals=*);;
-        printk.always_kmsg_dump=*|printk.time=*|processor.max_cstate=*);;
-        processor.nocst|profile=*|prompt_ramdisk=*|psmouse.proto=*);;
-        psmouse.rate=*|psmouse.resetafter=*|psmouse.resolution=*);;
-        psmouse.smartscroll=*|pstore.backend=*|pt.|pty.legacy_count=*|quiet);;
-        r128=*|raid=*|ramdisk_blocksize=*|ramdisk_size=*|rcu_nocbs=*);;
-        rcu_nocb_poll|rcutree.blimit=*|rcutree.fanout_leaf=*);;
-        rcutree.qhimark=*|rcutree.qlowmark=*|rcutree.rcu_cpu_stall_suppress=*);;
-        rcutree.rcu_cpu_stall_timeout=*|rcutree.jiffies_till_first_fqs=*);;
-        rcutree.jiffies_till_next_fqs=*|rcutorture.fqs_duration=*);;
-        rcutorture.fqs_holdoff=*|rcutorture.fqs_stutter=*);;
-        rcutorture.irqreader=*|rcutorture.n_barrier_cbs=*);;
-        rcutorture.nfakewriters=*|rcutorture.nreaders=*);;
-        rcutorture.onoff_holdoff=*|rcutorture.onoff_interval=*);;
-        rcutorture.shuffle_interval=*|rcutorture.shutdown_secs=*);;
-        rcutorture.stall_cpu=*|rcutorture.stall_cpu_holdoff=*);;
-        rcutorture.stat_interval=*|rcutorture.stutter=*);;
-        rcutorture.test_boost=*|rcutorture.test_boost_duration=*);;
-        rcutorture.test_boost_interval=*|rcutorture.test_no_idle_hz=*);;
-        rcutorture.torture_type=*|rcutorture.verbose=*|rdinit=*|reboot=*);;
-        relax_domain_level=*|reserve=*|reservetop=*|reservelow=*);;
-        reset_devices|resume=*|resume_offset=*|resumedelay=*|resumewait);;
-        hibernate=*|retain_initrd|rhash_entries=*|riscom8=*|ro|root=*);;
-        rootdelay=*|rootflags=*|rootfstype=*|rootwait|rw|S|sa1100ir|sbni=*);;
-        sched_debug|skew_tick=*|security=*|selinux=*|apparmor=*|serialnumber);;
-        shapers=*|show_msr=*|simeth=*|simscsi=*|slram=*|slab_max_order=*);;
-        slub_debug|slub_debug=*|slub_max_order=*|slub_min_objects=*);;
-        slub_min_order=*|slub_nomerge|smart2=*|smsc-ircc2.nopnp);;
-        smsc-ircc2.ircc_cfg=*|smsc-ircc2.ircc_sir=*|smsc-ircc2.ircc_fir=*);;
-        smsc-ircc2.ircc_irq=*|smsc-ircc2.ircc_dma=*);;
-        smsc-ircc2.ircc_transceiver=*|softlockup_panic=*|sonypi.*=*);;
-        specialix=*|spia_io_base=*|spia_fio_base=*|spia_pedr=*|spia_peddr=*);;
-        stacktrace|stacktrace_filter=*|sti=*|sti_font=*|stifb=*);;
-        sunrpc.min_resvport=*|sunrpc.max_resvport=*|sunrpc.pool_mode=*);;
-        sunrpc.tcp_slot_table_entries=*|sunrpc.udp_slot_table_entries=*);;
-        swapaccount|swapaccount=*|swiotlb=*|switches=*|sysfs.deprecated=*);;
-        sysrq_always_enabled|tdfx=*|test_suspend=*|thash_entries=*);;
-        thermal.act=*|thermal.crt=*|thermal.nocrt=*|thermal.off=*);;
-        thermal.psv=*|thermal.tzp=*|threadirqs|topology=*|tp720=*);;
-        tpm_suspend_pcr=*|trace_buf_size=*|trace_event=*|trace_options=*);;
-        transparent_hugepage=*|tsc=*|turbografx.map[23]=*|udbg-immortal);;
-        uhash_entries=*|uhci-hcd.ignore_oc=*|unknown_nmi_panic);;
-        usbcore.authorized_default=*|usbcore.autosuspend=*);;
-        usbcore.usbfs_snoop=*|usbcore.blinkenlights=*);;
-        usbcore.old_scheme_first=*|usbcore.usbfs_memory_mb=*);;
-        usbcore.use_both_schemes=*|usbcore.initial_descriptor_timeout=*);;
-        usbhid.mousepoll=*|usb-storage.delay_use=*|usb-storage.quirks=*);;
-        user_debug=*|userpte=*|vdso=*|vdso32=*|vector=*|video=*);;
-        virtio_mmio.device=*|vga=*|vmalloc=*|vmhalt=*|vmpanic=*|vmpoff=*);;
-        vsyscall=*|vt.cur_default=*|vt.default_blu=*|vt.default_grn=*);;
-        vt.default_red=*|vt.default_utf8=*|vt.global_cursor_default=*);;
-        watchdog|x2apic_phys|x86_mrst_timer=*|xd=*|xd_geo=*|xen_emul_unplug=*);;
-        xirc2ps_cs=*);;
-
-        drm.*|i915.*) ;;
-        nomodeset|*.modeset=*);;
-        nosplash|splash=*|fbcon=*);;
 
         #------------------------------------------------------------------------
         # NOTE: see /live/custom/$DISTRO_NAME/0.sh for distro specific boot codes
+        # and a massive list of known kernel and module parameters
         #------------------------------------------------------------------------
 
         *) UNKNOWN_BOOTCODES="$UNKNOWN_BOOTCODES $param"
@@ -1463,19 +1310,29 @@ set_fbcondecor() {
 }
 
 #------------------------------------------------------------------------------
-#
+# Create a file to blacklist modules when the initrd and when the main
+# system boots.  Specified by blacklist=xxx or bl=xxxx.
 #------------------------------------------------------------------------------
 blacklist_modules() {
-    local black_list=$1
+    local black_list=$1  local file=$2
     [ "$black_list" ] || return
 
     black_list=$(echo $black_list | sed -r "s/(VIDEO|KMS)/$KMS_VIDEO_MODULES/");
     mkdir -p /etc/modprobe.d/
+    cat << Black_List_File
+#------------------------------------------------------------------------------
+# file ${file##*/} created around $(date)
+#
+# Created by the antiX/MX live initrd.  This file will be erased on every
+# live boot.  Please rename it if you want to keep it.
+#------------------------------------------------------------------------------
+
+Black_List_File
     echo $black_list | sed 's/,/\n/g' | sed -r 's/^([a-z])/blacklist \1/' >> $BLACK_LIST_FILE
 }
 
 #------------------------------------------------------------------------------
-#
+# Load kernel modules giving by load=xxx
 #------------------------------------------------------------------------------
 load_kernel_modules() {
     local list=$1 file=$2
@@ -5509,7 +5366,6 @@ AutoLogin
 
     done
     return
-
 }
 
 #------------------------------------------------------------------------------
@@ -5535,10 +5391,10 @@ fancy_prompt() {
         db_msg 'fancy prompts were already enabled'
     else
         db_msg 'Enable fancy prompts and other goodies'
-
         cat << Fancy_Stuff >> $bashrc
 
 #----- Added by live initrd init script
+LESS="-R"
 [ -r $fp_prog ] && source $fp_prog
 [ -n "\$(alias $cmd)" ] && $prompt
 echo \$PATH | grep -q /live/bin || PATH=\$PATH:/etc/live/bin
@@ -5575,6 +5431,11 @@ copy_xtra() {
         cp -a $xtra_dir/$dir $NEW_ROOT/
     done
     msg
+
+     # Create a symlink to the /antiX/xtra directory if it exists
+    local r_dir="$NEW_ROOT/root"
+    local x_dir="$DEFAULT_DIR/xtra"
+    test -d $r_dir && test -d $x_dir && ln -s $x_dir $r_dir/xtra
 }
 
 #------------------------------------------------------------------------------
