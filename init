@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.10.16"
-           VERSION_DATE="Wed Sep 13 22:49:16 MDT 2017"
+                VERSION="8.10.22"
+           VERSION_DATE="Mon Sep 25 22:43:41 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -258,7 +258,9 @@ main_wrapper() {
     sync
     prep_seed_dev_random "$SEED_FILE"
     late_umount $PERSIST_DEVICE
-    late_umount $SQFILE_DEV
+
+     [ -z "$TORAM_STORE" ] && late_umount $SQFILE_DEV
+
     late_umount $BIOS_DEV
 
     if [ -z "$DISABLE_STORE" ]; then
@@ -378,9 +380,10 @@ main_core() {
 
     initialize_cmdline2
 
-    read PROC_CMDLINE 2>/dev/null </proc/cmdline
+    local p
+    PROC_CMDLINE=$(for p in $(cat /proc/cmdline 2>/dev/null); do echo $p; done)
 
-    [ "$DO_MENUS" ]; do_early_menus
+    [ "$DO_MENUS" ] && do_early_menus
 
     read_late_cmdline_params "$PROC_CMDLINE $(cat /live/config/cmdline)"
     echo "$PROC_CMDLINE" > /live/config/proc-cmdline
@@ -434,7 +437,9 @@ main_core() {
     mount -o remount,rw $SQFILE_DEV 2>/dev/null
     dir_has_param "$SQFILE_MP" rw || REMASTERABLE=
 
-    if [ "$REMASTERABLE" ]; then
+    detect_vga_menu "$CMD_VGA" "$GFX_SAVE"
+
+    if remasterable; then
         do_remaster "$SQFILE_FULL"
         prep_seed_dev_random "$SEED_FULL"
         echo "$SEED_FILE" > /live/config/seed-file
@@ -558,6 +563,7 @@ LINUXFS_DEV="$LINUXFS_DEV"
 BIOS_DEV="$BIOS_DEV"
 CRYPT_DEV="$CRYPT_DEV"
 SEED_FILE="$SEED_FILE"
+TORAM_STORE="$TORAM_STORE"
 Late_Umount
 }
 
@@ -637,6 +643,7 @@ read_late_cmdline_params() {
                   nousb2|noehci) NO_EHCI=true                         ;;
               private|private=*) FORCE_PASSWD=true                    ;;
                           toram) TO_RAM=true                          ;;
+                    toram_store) TO_RAM=true ; TORAM_STORE=true       ;;
 
         # Convenience short cuts from our menus
                     persist_all) PERSIST='root!,home'                 ;;
@@ -753,6 +760,7 @@ read_cmdline_params()
                       gfxsave=*) GFX_SAVE=$value ; BOOT_SAVE=true                ;;
                    save|gfxsave) GFX_SAVE=both   ; BOOT_SAVE=true                ;;
                        bootsave) BOOT_SAVE=true                                  ;;
+                          vga=*) CMD_VGA=$value                                  ;;
 
                       nocheckfs) DO_FSCK=                                        ;;
 
@@ -815,6 +823,7 @@ read_cmdline_params()
                   nousb2|noehci)  ;;
               private|private=*)  ;;
                           toram)  ;;
+                    toram_store)  ;;
 
         # Convenience short cuts from our menus
                     persist_all)  ;;
@@ -854,6 +863,10 @@ read_cmdline_params()
         USER_UID=0
         USER_GID=0
     fi
+
+    case $CMD_VGA in
+        ask+save) GFX_SAVE=both ; BOOT_SAVE=true ;;
+    esac
 }
 
 #------------------------------------------------------------------------------
@@ -3629,7 +3642,7 @@ do_late_menus() {
     local cmdline
     my_select_menu  "$_Select_Desktop_" "" d desktop  "$_Desktop_" 'desktheme=*'
 
-    if [ "$REMASTERABLE" ]; then
+    if remasterable; then
         BOOT_MENU_DIR=/live/menus
         my_select_menu  "$_Save_these_changes_" "" s save  "$_Save_"
         echo "$cmdline" | grep -q bootsave && BOOT_SAVE=true
@@ -5622,6 +5635,7 @@ SQFS_MP="$SQFS_MP"
 SQFS_VID_FILE="$SQFS_VID_FILE"
 STATIC_ROOT="$STATIC_ROOT"
 TORAM_MP="$TORAM_MP"
+TORAM_STORE="$TORAM_STORE"
 USER_GID="$USER_GID"
 USER_UID="$USER_UID"
 VID_ERROR="$VID_ERROR"
@@ -5632,6 +5646,7 @@ Initrd_Out
 
     [ -e /sys/firmare/efi ]                  && touch $dir/uefi
     [ "$DID_TORAM"    ]                      && touch $dir/did-toram
+    [ "$TORAM_STORE"  ]                      && touch $dir/toram-store
     [ "$REMASTERABLE" ]                      && touch $dir/remasterable
     [ "$PERSIST_ROOT" ]                      && touch $dir/persist-root
     [ "$PERSIST_ROOT" -a -z "$STATIC_ROOT" ] && touch $dir/save-persist
@@ -5667,7 +5682,7 @@ Initrd_Out
 #------------------------------------------------------------------------------
 update_store_file() {
     local disable=$1  enable=$2
-    [ "$REMASTERABLE" ] || return
+    remasterable || return
 
     local no_store_file=$ORIG_SQFILE_MP/$ORIG_SQFILE_DIR/state/nostore
     if [ "$disable" ]; then
@@ -5753,6 +5768,64 @@ update_file() {
     test -e $src || return
     diff -q $src $dest &>/dev/null && return
     cp -a $src $dest
+}
+
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
+detect_vga_menu() {
+    local cmd_code=$1
+    unset NEW_VGA_CODE
+
+    [ -z  "$cmd_code" ] && return
+    
+    # Convert hex to decimal
+    [ -z "${cmd_code##0[xX]*}" ] && cmd_code=$(printf "%d" $cmd_code)
+
+    local cmd_res
+    case $cmd_code in
+        # Standard resolution codes
+            769|785|786) cmd_res=640,480   ;;
+            771|788|789) cmd_res=800,600   ;;
+            773|791|792) cmd_res=1024,768  ;;
+            775|794|795) cmd_res=1280,1024 ;;
+
+        # do nothing with non-standard resolution codes
+        [0-9][0-9][0-9]) return            ;;
+
+        # We will skip asking of they want to save if they used "ask"
+                    ask) cmd_res=ask       ;;
+
+        # Everything else is treated as "other" (which is not used)
+                      *) cmd_res=other     ;;
+    esac
+
+    local sdir="/sys/class/graphics"
+    local cur_res=$(cat $sdir/fb0/virtual_size 2>/dev/null)
+
+    [ -z "$cur_res" ]            && return
+    [ "$cmd_res" == "$cur_res" ] && return
+
+    warn  "$_It_appears_you_selected_VGA_resolution_X_" "$(pq $cur_res)"
+
+    remasterable                || return
+    [ "$cmd_res" == 'ask' ]     && return
+    [ -n "$GFX_SAVE" ]          && return
+
+    # We should only get here if saving makes sense, if they didn't didn't
+    # already tell us to save, if there is a framebuffer and if a standard
+    # resolution was specified but does not match the current resolution.
+    #
+    # NOTE: we only check for the "true" vga code when saving when either
+    # "vga=ask" or "vga=ask+save" was used.  Therefore we still miss the
+    # case where someone uses a non-standard vga=code and gets the VGA menu.
+    YES_no  "$_Would_you_like_to_save_this_resolution_for_subsequent_boots_" || return
+
+    sed -i -r "s/(^| )vga=[^ ]*/\1vga=ask+save/" /live/config/proc-cmdline
+    PROC_CMDLINE=$(cat /live/config/proc-cmdline)
+    GFX_SAVE=both
+    BOOT_SAVE=true
+    msg  "$_Will_save_the_new_VGA_setting_and_your_other_boot_parameters_"
 }
 
 #------------------------------------------------------------------------------
@@ -5901,6 +5974,10 @@ prepare_switch_root() {
     (cd $new_root && mkdir -p sys proc dev/pts)
 }
 
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
+remasterable() { [ -n "$REMASTERABLE" ];  return $?; }
 #------------------------------------------------------------------------------
 #
 #------------------------------------------------------------------------------
