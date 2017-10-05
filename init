@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.10.26"
-           VERSION_DATE="Fri Sep 29 07:14:59 MDT 2017"
+                VERSION="8.10.30"
+           VERSION_DATE="Wed Oct  4 23:08:18 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -65,7 +65,7 @@
          FROM_TYPE="usb,cd"
      FROM_TYPE_ALL="usb,cd,hd"
 
-      FRUGAL_FILES="linuxfs vmlinuz vmlinuz1 initrd.gz xtra xtra.tgz"
+      FRUGAL_FILES="linuxfs vmlinuz vmlinuz1 initrd.gz xtra xtra.tgz esp-uuid"
       FRUGAL_FILES="$FRUGAL_FILES ../boot ../efi ../EFI ../cdrom.ico ../version"
 
      MAX_MOUNT_CNT=30
@@ -419,6 +419,7 @@ main_core() {
     dir_has_param "$BOOT_MP" rw && REMASTERABLE=true
     [ "$DID_ISO" ] && REMASTERABLE=
 
+    BOOT_FSTYPE=$(mntpnt_fstype $BOOT_MP)
     case $BOOT_FSTYPE in
         iso9660|udf) REMASTERABLE= ;;
     esac
@@ -1936,7 +1937,6 @@ frugal_error() {
     done
 
     non_fatal  "Frugal install failed (or was teminated)"
-
 }
 
 #------------------------------------------------------------------------------
@@ -1979,7 +1979,7 @@ find_frugal_file() {
         msg 'Force frugal install'
         if [ $ret -eq 0  ]; then
             device=$FOUND_DEV
-            umount $FOUND_DEV
+            log_cmd umount $FOUND_DEV
         fi
 
     else
@@ -1991,6 +1991,7 @@ find_frugal_file() {
 
     find_crypt_or_linuxfs
 
+    BIOS_DEV=$FOUND_DEV
     SQFILE_MP=$BOOT_MP
     SQFILE_DEV=$FOUND_DEV
 
@@ -2070,13 +2071,18 @@ find_frugal_file() {
             log_cmd rm -f $sqfile_full
             return 40
         fi
+
+        case $(device_fstype $BIOS_DEV) in
+            vfat|ext[234]) device_uuid $BIOS_DEV > $sqfile_dir/bios-dev-uuid
+        esac
+
         #. The <frugal> install succeeded
         warn  "$_The_X_install_succeeded_" frugal
         DID_FRUGAL=true
     fi
 
-    log_cmd umount $SQFS_MP
-    log_cmd umount $BOOT_MP
+    lazy_umount $SQFS_MP
+    lazy_umount $BOOT_MP
 
     mount --move $FRUGAL_MP $BOOT_MP
     rmdir $FRUGAL_MP
@@ -2699,14 +2705,15 @@ try_mount() {
     local fatopts=$winopts,shortname=winnt,uid=$USER_UID,gid=$USER_GID
 
     case $type in
-            ext4) log_cmd mount -t $type   -o $opts$LAZYTIME  $dev "$mp" 2>/dev/null ;;
-        ext[234]) log_cmd mount -t $type   -o $opts           $dev "$mp" 2>/dev/null ;;
-            vfat) log_cmd mount -t vfat    -o $fatopts        $dev "$mp" 2>/dev/null ;;
-         iso9660) log_cmd mount -t iso9660 -o ro              $dev "$mp" 2>/dev/null ;;
-             udf) log_cmd mount -t udf     -o ro              $dev "$mp" 2>/dev/null ;;
-            ntfs) log_cmd ntfs-3g          -o $ntfsopts       $dev "$mp" 2>/dev/null 17>/dev/null || \
-                  log_cmd mount -t ntfs    -o umask=000,ro    $dev "$mp" 2>/dev/null ;;
-               *) log_cmd mount -t $type   -o $opts           $dev "$mp" 2>/dev/null ;;
+            ext4) log_cmd mount -t $type   -o $opts$LAZYTIME  $dev "$mp" ;;
+        ext[234]) log_cmd mount -t $type   -o $opts           $dev "$mp" ;;
+            vfat) modprobe -q nls-cp437
+                  log_cmd mount -t vfat    -o $fatopts        $dev "$mp" ;;
+         iso9660) log_cmd mount -t iso9660 -o ro              $dev "$mp" ;;
+             udf) log_cmd mount -t udf     -o ro              $dev "$mp" ;;
+            ntfs) log_cmd ntfs-3g          -o $ntfsopts       $dev "$mp" 17>/dev/null || \
+                  log_cmd mount -t ntfs    -o umask=000,ro    $dev "$mp" ;;
+               *) log_cmd mount -t $type   -o $opts           $dev "$mp" ;;
     esac
     return $?
 }
@@ -2737,6 +2744,16 @@ mount_tmpfs() {
     vmsg 8  "$_Create_X_at_Y_Z_" "${hi_co}$full_name${m_co}" "$(fq "$full_mp")" "(${num_co}$size ${m_co}MB)"
     log_cmd $LIVE_BIN/mount -t tmpfs -o size=${size}m$opts,noatime tmpfs $mp
     return $?
+}
+
+#------------------------------------------------------------------------------
+# Try a lazy umount and throw an error if the mp is still mounted.  Use with
+# caution.
+#------------------------------------------------------------------------------
+lazy_umount() {
+    local mp=$1
+    log_cmd umount -l $mp
+    mountpoint -q $mp && non_fatal "Was not able to unmount $mp"
 }
 
 #==============================================================================
@@ -2947,7 +2964,7 @@ breakpoint() {
         local now=$(get_time)
         local delta=$(get_seconds $((now - LAST_BP_TIME)))
         vmsg 8 "$green@bp$cyan[$num_co$bp$m_co]$hi_co %5ss (%5s)$m_co: %s" "$(get_seconds $now)" "$delta" "$desc"
-        vmsg 8 'Available entropy %s' "$(pq $(cat /proc/sys/kernel/random/entropy_avail 2>/dev/null))"
+        #vmsg 8 'Available entropy %s' "$(pq $(cat /proc/sys/kernel/random/entropy_avail 2>/dev/null))"
         LAST_BP_TIME=$now
     fi
 
@@ -4808,7 +4825,6 @@ mount_persist_device() {
 
         unset WANT_ROOTFS WANT_HOMEFS NEED_ROOTFS NEED_HOMEFS
     fi
-
 }
 
 #------------------------------------------------------------------------------
@@ -5034,8 +5050,6 @@ select_persist_device() {
     warn  "Could not find a partition with label %s" "$(pqw $label)"
     warn
     msg  "$_Please_wait_while_existing_partitions_are_found_"
-
-    breakpoint x "before select device"
 
     select_device  "$_persistence_" device 100 || return 1
     local ret=$?
@@ -5448,7 +5462,7 @@ copy_xtra() {
      # Create a symlink to the /antiX/xtra directory if it exists
     local r_dir="$NEW_ROOT/root"
     local x_dir="$DEFAULT_DIR/xtra"
-    test -d $r_dir && test -d $x_dir && ln -s $x_dir $r_dir/xtra
+    test -d $r_dir && test -d $x_dir && log_cmd ln -s $x_dir $r_dir/xtra
 }
 
 #------------------------------------------------------------------------------
@@ -5598,6 +5612,7 @@ write_output_files() {
 AUFS_MP="$AUFS_MP"
 AUFS_RAM_MP="$AUFS_RAM_MP"
 AUFS_VID_FILE="$AUFS_MP$VID_FILE"
+BIOS_DEV="$BIOS_DEV"
 BIOS_MP="$BIOS_MP"
 BIOS_UUID="$BIOS_UUID"
 BOOT_DEV="$SQFILE_DEV"
@@ -5778,7 +5793,7 @@ detect_vga_menu() {
     unset NEW_VGA_CODE
 
     [ -z  "$cmd_code" ] && return
-    
+
     # Convert hex to decimal
     [ -z "${cmd_code##0[xX]*}" ] && cmd_code=$(printf "%d" $cmd_code)
 
@@ -5921,7 +5936,10 @@ prepare_switch_root() {
 
     local f
     for f in README LICENSE; do
-        test -e /live/$f && cp /live/$f $new_live/
+        local from=/live/$f  to=$new_root/etc/live/$f
+        test -e $from || continue
+        test -e $to   && continue
+        cp $from $to
     done
 
     # cp -a /bin/shutdown $new_live/
