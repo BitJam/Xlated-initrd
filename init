@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.10.30"
-           VERSION_DATE="Wed Oct  4 23:08:18 MDT 2017"
+                VERSION="8.10.35"
+           VERSION_DATE="Thu Oct  5 21:37:54 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -67,6 +67,7 @@
 
       FRUGAL_FILES="linuxfs vmlinuz vmlinuz1 initrd.gz xtra xtra.tgz esp-uuid"
       FRUGAL_FILES="$FRUGAL_FILES ../boot ../efi ../EFI ../cdrom.ico ../version"
+       FRUGAL_NAME="antiX"
 
      MAX_MOUNT_CNT=30
        RETRY_DELAY=50               # in hundredths of a second
@@ -607,7 +608,7 @@ read_distro_release() {
 }
 
 #------------------------------------------------------------------------------
-#
+# Clear out all extraneous environment variables
 #------------------------------------------------------------------------------
 clear_env() {
     local ev
@@ -668,7 +669,7 @@ read_late_cmdline_params() {
 #
 #------------------------------------------------------------------------------
 set_frugal() {
-    : ${FRUGAL_ID:=label=$DISTRO_NAME-Frugal}
+    : ${FRUGAL_ID:=label=$FRUGAL_NAME-Frugal}
     [ "$NO_LABEL_FRUGAL" ] || LABEL_FRUGAL=true
     PERSIST=$1
 }
@@ -1943,7 +1944,7 @@ frugal_error() {
 #
 #------------------------------------------------------------------------------
 find_frugal_file() {
-    local frugal_id=$1  bdir=$DISTRO_NAME-Frugal-$(uname -r)
+    local frugal_id=$1  bdir=$FRUGAL_NAME-Frugal-$(uname -r)
     local sqfile=$bdir/$SQFILE_NAME need_to_ask
     local device name=${frugal_id%%=*}  value=${frugal_id#*=}
 
@@ -2021,7 +2022,7 @@ find_frugal_file() {
 
         [ -z "$device" -o "$device" =  "$_quit_" ] && return 1
 
-        [ "$LABEL_FRUGAL" ] && label_device $device "$DISTRO_NAME-Frugal"
+        [ "$LABEL_FRUGAL" ] && label_device $device "$FRUGAL_NAME-Frugal"
     fi
 
     if ! mkdir -p $FRUGAL_MP; then
@@ -3741,7 +3742,8 @@ select_device() {
 
         local dev=/dev/$name
 
-        local label=$(echo "$line" | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/[^:]*: LABEL="//p')
+        local label=$(echo "$line" | sed -n -r -e 's/" (UUID=|TYPE=)".*//' -e 's/^LABEL="//p')
+
         size_rev=
         name_rev=
         free_rev=
