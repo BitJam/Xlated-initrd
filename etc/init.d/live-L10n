@@ -50,7 +50,7 @@ load_translation
 
 
 # Start block of code that is sent to the log file
-{
+main() {
     echo_script "$_Localizing_console_and_timezone_" $0
 
     #-jbb: for debugging
@@ -105,25 +105,28 @@ load_translation
         loadkeys -q "$KEYTABLE"
     fi
 
+    #[ -n "$CMD_FONT" ] && set_console_font "$CMD_LANG" "$CMD_FONT"
+}
 
-    CONSOLE_FONT=${CMD_FONT:-$CONSOLE_FONT}
-    if [ "$CONSOLE_FONT" ]; then
-        case $CONSOLE_FONT in
-            [0-9][0-9]x[0-9][0-9])
-                CONSOLE_FONT=Uni2-Terminus$CONSOLE_FONT ;;
-            [bB][0-9][0-9]x[0-9][0-9])
-                CONSOLE_FONT=Uni2-TerminusBold${CONSOLE_FONT#[bB]} ;;
-        esac
-        FFILE=/usr/share/consolefonts/$CONSOLE_FONT
-        if [ -e $FFILE -o -e $FFILE.gz -o -e $FFILE.psf.gz -o -e $FFILE.psfu.gz \
-            -o -e $FFILE.cp.gz -o -e $FFILE.cp ]; then
-            echo_live "$_Setting_console_font_to_X_" $(pquote $CONSOLE_FONT)
-            setfont $CONSOLE_FONT
-        else
-            error "$_Unknown_console_font_X_" "confont=$(pquote $CONSOLE_FONT)"
-        fi
+add_or_replace() {
+    local where=$1  line=$2  file=$3  create=$4
+
+    if ! test -e "$file"; then
+        [ "$create" ] && echo "$line" > $file
+        return
     fi
 
-} 2>&1 | tee -a $INIT_LOG_FILE
+    if grep -iq "$where" "$file"; then
+        # Don't over-write the same string
+        grep -q "^$line" "$file" && return
+        # Edit the existing line
+        sed -i -r "/$where/I s|.*|$line|" $file
+    else
+        # Add it under the top line of the file
+         sed -i "1 a$line" $file
+    fi
+}
 
+
+main "$@" 2>&1 | tee -a $INIT_LOG_FILE
 exit 0
