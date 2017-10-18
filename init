@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.10.39"
-           VERSION_DATE="Tue Oct 17 13:58:27 MDT 2017"
+                VERSION="8.10.40"
+           VERSION_DATE="Wed Oct 18 09:35:59 MDT 2017"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -3620,11 +3620,11 @@ gather_frugal_cmdline() {
     for p in $(cat /live/config/proc-cmdline /live/config/cmdline 2>/dev/null) $*; do
         value=${p#*=}
         case $p in
-                frugal=*) $p=persist=$value     ;;
-          frugal_persist) $p=persist_all        ;;
-             frugal_root) $p=persist_root       ;;
-           frugal_static) $p=persist_static     ;;
-             frugal_home) $p=persist_home       ;;
+                frugal=*) p=persist=$value      ;;
+          frugal_persist) p=persist_all         ;;
+             frugal_root) p=persist_root        ;;
+           frugal_static) p=persist_static      ;;
+             frugal_home) p=persist_home        ;;
         esac
 
         case $p in
