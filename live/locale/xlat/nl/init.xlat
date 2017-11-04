@@ -99,6 +99,7 @@ _Possibly_unknown_or_misspelled_boot_codes_="Mogelijk onbekende of verkeerd gesc
 _Preparing_for_passphrase_first_boot_reset_="Voorbereiden voor wachtwoordzin eerste boot reset"
 _Press_X_for_the_default_selection_="Druk <%s> voor de standaard keuze"
 _Press_X_to_Y_="Druk op %s om %s"
+_Press_X_to_continue_="Druk op <%s> om verder te gaan"
 _Previous_default_X_erased_="Voormalige standaard %s gewist"
 _Remove_the_X_boot_parameter_to_allow_that_device_to_be_scanned_="Verwijder de %s boot parameter zodat het apparaat kan worden gescand"
 _Required_encryption_kernel_module_X_not_found_="Vereiste versleutel kernel module %s niet gevonden."

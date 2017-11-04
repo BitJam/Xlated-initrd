@@ -101,6 +101,7 @@ _Possibly_unknown_or_misspelled_boot_codes_="Codici di boot probabilmente sconos
 _Preparing_for_passphrase_first_boot_reset_="E' in preparazione il reset della password/pass-frase del primo-avvio"
 _Press_X_for_the_default_selection_="Premi <%s> per la selezione predefinita"
 _Press_X_to_Y_="Premere %s su %s"
+_Press_X_to_continue_="Premi <%s> per continuare"
 _Previous_default_X_erased_="La modalità predefinita precedente %s è stata eliminata"
 _Remove_the_X_boot_parameter_to_allow_that_device_to_be_scanned_="Rimuovere il parametro del boot %s per consentire che il dispositivo venga rilevato"
 _Required_encryption_kernel_module_X_not_found_="Modulo richiesto del kernel per la crittografia %s non trovato."

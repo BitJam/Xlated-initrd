@@ -101,6 +101,7 @@ _Possibly_unknown_or_misspelled_boot_codes_="Codes de démarrage vraisemblableme
 _Preparing_for_passphrase_first_boot_reset_="Préparation de la réinitialisation de la phrase de passe  du premier démarrage"
 _Press_X_for_the_default_selection_="Appuyez sur <%s> pour le sélection par défaut"
 _Press_X_to_Y_="Appuyez sur %s pour %s"
+_Press_X_to_continue_="Appuyez sur <%s> pour continuer"
 _Previous_default_X_erased_="La valeur par défaut préexistante %s a été supprimée"
 _Remove_the_X_boot_parameter_to_allow_that_device_to_be_scanned_="Afin de scanner ce périphérique, le paramètre de démarrage %s doit être supprimé"
 _Required_encryption_kernel_module_X_not_found_="Module de chiffrement du noyau requis %s introuvable"
