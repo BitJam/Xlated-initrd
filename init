@@ -2,7 +2,7 @@
 
 #==============================================================================
 # LiveCD/USB/HD init script
-# (C) 2009-2017 Paul Banham <antiX@operamail.com>
+# (C) 2009-2019 Paul Banham <antiX@operamail.com>
 # Inspired by the work of Klaus Knopper
 #
 # License: GPLv3 or later
@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.12.09"
-           VERSION_DATE="Mon Mar 26 10:45:57 MDT 2018"
+                VERSION="8.12.13"
+           VERSION_DATE="Thu Mar 14 20:34:08 MDT 2019"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -110,11 +110,12 @@
   LIVE_386_LD_PATH="/lib:/lib/i386-linux-gnu:/usr/lib"
 
 MKFS_FREE_MARGIN=10
-  rootfs_SIZE_PARAM="min_size=250 mid_size=100 max_size=4096 factor=50"
-  homefs_SIZE_PARAM="min_size=10 mid_size=100 max_size=8192 factor=25"
-         MKFS_SIZES="250 375 500 750 1024 1500 2048 2500 3072 4096"
+  rootfs_SIZE_PARAM="min_size=250 mid_size=100 max_size=8192  factor=50"
+  homefs_SIZE_PARAM="min_size=10  mid_size=100 max_size=10240 factor=25"
+         MKFS_SIZES="500 750 1024 1500 2048 2500 3072 4096"
        BIGGER_SIZES="5120 6144 8192 10240 12288 15360 20480"
-      SMALLER_SIZES="10 100 175"
+      BIGGEST_SIZES="51200 102400 204800 512000"
+      SMALLER_SIZES="10 100 175 250 375"
 
       LIVE_SCRIPTS="live-L10n live-init"
       LAST_BP_TIME=0
@@ -126,8 +127,14 @@ MKFS_FREE_MARGIN=10
       MADE_BY_FILE="made-by-live-usb-maker"
     PROG_BAR_WIDTH=100
 
-   MIN_SCREEN_WIDTH=80
-   DEF_SCREEN_WIDTH=120
+  MIN_SCREEN_WIDTH=80
+  DEF_SCREEN_WIDTH=120
+
+      DID_EFI_FILE="boot/grub/config/did-efi-grub"
+     EFI_GRUB_CONF="boot/grub/config/efi-grub.cfg"
+    UEFI_UUID_FILE="antiX/esp-uuid"
+
+     LIVE_LOGS_DIR="live-logs"
 
     #           HUP INT QUIT SEGV TERM
     SIGNAL_LIST="1   2   3    11   15"
@@ -158,6 +165,9 @@ set_live_dirs() {
 
 hbar="======================================================================"
 tbar="----------------------------------------------------------------------"
+rbar=">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+lbar="<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
+
 
 main_wrapper() {
 
@@ -239,7 +249,8 @@ main_wrapper() {
     breakpoint 8      "before running live init.d scripts"
     breakpoint b8     "Bash shell before running live init.d scripts"
 
-    remove_from_runlevel lightdm 3
+    # I hope this is no longer needed
+    # remove_from_runlevel lightdm 3
 
     # Try running live-usb-save first so it can restore an xorg.conf machine-state file
     confile remasterable && LIVE_SCRIPTS="live-usb-save $LIVE_SCRIPTS"
@@ -270,7 +281,7 @@ main_wrapper() {
 
     if [ -z "$DISABLE_STORE" ]; then
         if detect_old_persist_scripts $NEW_ROOT; then
-            warn  "$_X_disabled_due_to_outdated_persistence_scripts_and_libs_" "$(pqw LiveUSB-Storage)"
+            warn  "$_X_disabled_due_to_outdated_persistence_scripts_and_libs_" "$(pqw Live-usb-storage)"
         else
             confile remasterable && run_init_scripts $NEW_ROOT live-usb-storage
 
@@ -297,13 +308,14 @@ main_wrapper() {
     done
     rm -f $rm_list
 
-    rm -f $NEW_ROOT$BLACK_LIST_FILE
-    [ -e $BLACK_LIST_FILE ] && cp $BLACK_LIST_FILE $NEW_ROOT$BLACK_LIST_FILE
+    if [ -e $BLACK_LIST_FILE ]; then
+        local modprobe_d=$NEW_ROOT/run/modprobe.d
+        mkdir -p $modprobe_d
+        cp $BLACK_LIST_FILE $modprobe_d
+    fi
 
     dmesg > $NEW_ROOT/live/config/dmesg.out
 
-    breakpoint bash  "Bash shell right before starting init"
-    breakpoint b9    "Bash shell right before starting init"
     breakpoint 9     "right before starting init"
 
     stop_hotplug
@@ -316,6 +328,10 @@ main_wrapper() {
 
     write_log_files $MY_LOG $NEW_ROOT/$LOG_FILE
     MY_LOG=$NEW_ROOT/$LOG_FILE.color
+    [ "$NO_SAVE_LOGS" ] || copy_live_logs "$NEW_ROOT" "$LOG_DIR"
+
+    breakpoint b9    "Bash shell right before starting init"
+    breakpoint bash  "Bash shell right before starting init"
 
     #free -m >> $MY_LOG
     echo 3 > /proc/sys/vm/drop_caches
@@ -457,6 +473,8 @@ main_core() {
     fi
 
     mount_linuxfs "$SQFS_MP" "$SQFILE_FULL" "$WRAP_FILE_MP"
+
+    fix_old_lum "$BOOT_MP" "${BIOS_UUID:-$BOOT_UUID}"
 
     if [ "$LOAD_ALL_MODULES" ]; then
         debug_cmd find /sys/devices -name uevent -exec sed -n 's/^MODALIAS=//p' '{}' + 2>/dev/null | sort -u
@@ -823,6 +841,8 @@ read_cmdline_params()
                       nomodeset) NO_MODESET=true                                 ;;
             noumount|noumnt|noU) NO_UMOUNT=true                                  ;;
                           [1-6]) RUN_LEVEL=$val                                  ;;
+                     nosavelogs) NO_SAVE_LOGS=true                               ;;
+                       notmptmp) $NO_TMP_TMP=true                                ;;
 
         #----- These get interpreted late but we don't want them to be unknown
                 hwclock=*|hwc=*)  ;;
@@ -2169,7 +2189,7 @@ find_linuxfs_file() {
         mkdir -p $ISO_FILE_MP
         mount -t iso9660 -o loop,ro $iso_full $ISO_FILE_MP \
             || mount -t udf -o loop,ro $iso_full $ISO_FILE_MP \
-            || fatal  "$_Could_not_mount_X_as_a_Y_file_" "$(pqh $iso_full)" 'iso'
+            || fatal_dmesg  "$_Could_not_mount_X_as_a_Y_file_" "$(pqh $iso_full)" 'iso'
 
         # Find the linuxfs file
         SQFILE_FULL="$ISO_FILE_MP/$SQFILE_FILE"
@@ -2205,7 +2225,7 @@ find_linuxfs_file() {
 #------------------------------------------------------------------------------
 validate_encryption_mode() {
 
-    : ${ENCRYPT_MODE=$(head -n1 $ENCRYPT_MODE_FILE 2>/dev/null)}
+    : ${ENCRYPT_MODE:=$(head -n1 $ENCRYPT_MODE_FILE 2>/dev/null)}
 
     # Default to enable or disabled depending on existence of cryptsetup program
     if [ -z "$ENCRYPT_MODE" ]; then
@@ -2245,7 +2265,7 @@ find_crypt_or_linuxfs() {
            $ENCRYPT_BOTH) files="$crypt_full $SQFILE_FILE"  ;;
            $ENCRYPT_ONLY) files="$crypt_full"               ;;
                   uuid=*) CRYPT_UUID=${ENCRYPT_MODE#uuid=}  ;;
-                       *) fatal 'Unknown encyption mode %s' "$ENCRYPT_MODE" ;;
+                       *) fatal 'Unknown encryption mode %s' "$ENCRYPT_MODE" ;;
     esac
 
     local crypt_dev
@@ -2316,7 +2336,7 @@ find_crypt_or_linuxfs() {
     cttyhack cryptsetup open --type luks $crypt_dev $LUKS_NAME || fatal  "$_Could_not_open_LUKS_device_X_" $crypt_dev
     local mapper_dev=/dev/mapper/$LUKS_NAME
     msg  "$_Opened_encrypted_device_X_at_Y_" "$crypt_dev" "$mapper_dev"
-    try_mount "$mapper_dev" "$BOOT_MP" || fatal  "$_Could_not_mount_encrypted_device_"
+    try_mount "$mapper_dev" "$BOOT_MP" || fatal_dmesg  "$_Could_not_mount_encrypted_device_"
     test -e "$BOOT_MP/$SQFILE_FILE" || fatal  "$_Could_not_find_file_X_on_encrypted_partition_" "$SQFILE_FILE"
     BOOT_FSTYPE=$(mntpnt_fstype $BOOT_MP)
     ENCRYPTED=true
@@ -2545,7 +2565,7 @@ mount_linuxfs() {
     vmsg 6  "Mount file %s at %s" "$(fq $sqfile_full)" "$(fq $sqfs_mp)"
     #. Could not mount <file name> as a <type> filesystem
     log_cmd mount -t squashfs -o loop,ro $sqfile_full $sqfs_mp \
-        || fatal  "$_Could_not_mount_X_as_a_Y_filesystem_" $sqfile_full squashfs
+        || fatal_dmesg  "$_Could_not_mount_X_as_a_Y_filesystem_" $sqfile_full squashfs
 
     if [ -n "$wrap_mp" -a -e "$sqfs_mp/$SQFILE_NAME" -a ! -d "$sqfs_mp/usr" ]; then
         msg 'Found wrapped filesystem. Move wrapper ...'
@@ -2553,7 +2573,7 @@ mount_linuxfs() {
         mount --move $sqfs_mp $wrap_mp
 
         try_file_mount  $wrap_mp/$SQFILE_NAME $sqfs_mp ro \
-            || fatal  "$_Could_not_mount_X_as_a_Y_file_" $sqfile_full 'filesystem'
+            || fatal_dmesg  "$_Could_not_mount_X_as_a_Y_file_" $sqfile_full 'filesystem'
     fi
 
     LINUXFS_DEV=$(df -P $sqfile_full | tail -n1 | cut -d" " -f1)
@@ -2701,7 +2721,7 @@ mount_overlayfs() {
     vmsg 6 'Mount %s at %s' 'overlayfs' "$(fq $aufs_mp)"
 
     log_cmd mount -t overlay overlay -o "lowerdir=$sqfs_mp,upperdir=$upper,workdir=$work" $aufs_mp \
-        || fatal  "$_Could_not_mount_X_" overlayfs
+        || fatal_dmesg  "$_Could_not_mount_X_" overlayfs
 }
 
 
@@ -2715,7 +2735,7 @@ mount_aufs() {
     vmsg 5  "Mount %s at %s" 'aufs' "$(fq $aufs_mp)"
 
     log_cmd mount -t aufs -o "$aufs_arg",noatime $aufs_mp $aufs_mp \
-        || fatal  "$_Could_not_mount_X_" aufs
+        || fatal_dmesg  "$_Could_not_mount_X_" aufs
 }
 
 #------------------------------------------------------------------------------
@@ -3024,6 +3044,8 @@ breakpoint() {
     echo "$green    Use$white safe-poweroff$green and$white safe-reboot$green to poweroff and reboot"
 
     local bp_time_1=$(get_time)
+
+    sync
 
     trap - $SIGNAL_LIST
 
@@ -3397,6 +3419,17 @@ _fatal()     { _error  "$_Fatal_Error_"     ""  ""          "$@" ;}
 _non_fatal() { _error  "$_Non_Fatal_Error_" "c"  "$_continue_"  "$@" ;}
 fatal()      { _fatal     "$(printf "$@")"                   ;}
 non_fatal()  { _non_fatal "$(printf "$@")"                   ;}
+
+
+fatal_dmesg() {
+    local lines=10
+    printf  "$_Last_X_lines_of_the_dmesg_output_" "$lines"
+    printf "%s\n" "$rbar"
+    dmesg | tail -n$lines
+    printf "%s\n" "$lbar"
+
+    fatal "$@"
+}
 
 YES_no() {  _yes_no 0  "$_yes_" "$@" ;}
 yes_NO() {  _yes_no 1  "$_no_"  "$@" ;}
@@ -5010,10 +5043,11 @@ _persist_makefs() {
     local part_fstype=$(mntpnt_fstype $dir) mkfs_sizes=$MKFS_SIZES is_vfat
     case $part_fstype in
         vfat) is_vfat=true ;;
-           *) mkfs_sizes="$mkfs_sizes $BIGGER_SIZES" ;;
+           *) mkfs_sizes="$mkfs_sizes $BIGGER_SIZES"
+              [ "$base_file" = homefs ] && mkfs_sizes="$mkfs_sizes $BIGGEST_SIZES";;
     esac
 
-    [ "$base_file" = homefs ] && mkfs_sizes="$SMALLER_SIZES $mkfs_sizes"
+    [ "$base_file" = homefs -a "$avail" -lt 1024 ] && mkfs_sizes="$SMALLER_SIZES $mkfs_sizes"
 
     local max_mkfs_size=${mkfs_sizes##* }
 
@@ -5030,6 +5064,7 @@ _persist_makefs() {
         sizes="$sizes $size"
     done
 
+    # FIXME: this needs to be rounded or something
     # Include default size at end of menu if needed
     if [ -z "$default_cnt" -a $default_size -gt 0 ]; then
         sizes="$sizes $default_size"
@@ -5545,6 +5580,8 @@ Fancy_Stuff
 
     fi
 
+    sync
+
     local file full_file
     for file in .bashrc .profile; do
         full_file=$dir/etc/skel/$file
@@ -5838,6 +5875,26 @@ write_log_files() {
 }
 
 #------------------------------------------------------------------------------
+# Make a copy of /var/log/live/ at /root/Live-usb-storage/live-logs
+# Backup the previous version with a .old extension.
+#------------------------------------------------------------------------------
+copy_live_logs() {
+    local new_root=$1  log_dir=$2
+    local targ_dir=$new_root/root/Live-usb-storage
+    test -d $targ_dir || return
+    local targ_live=$targ_dir/$LIVE_LOGS_DIR
+    local targ_old=$targ_live.old
+
+    # Make room for new .old directory
+    [ -e $targ_live -a -e $targ_old ] && rm -rf $targ_old
+
+    # Save current to .old
+    [ -e $targ_live ] && mv $targ_live $targ_old
+
+    cp -r $new_root$log_dir $targ_live
+}
+
+#------------------------------------------------------------------------------
 #
 #------------------------------------------------------------------------------
 decolor_file() {
@@ -6048,6 +6105,71 @@ write_ntfs_pids() {
     echo "$ntfs_pids" > $file
 }
 
+
+#------------------------------------------------------------------------------
+# This makes old live-usb-maker acting on a new iso just like the new LUM.
+#------------------------------------------------------------------------------
+fix_old_lum() {
+    boot_mp=$1  bios_uuid=$2
+
+    test -e $boot_mp/$DID_EFI_FILE  && return 0
+    test -e $boot_mp/$EFI_GRUB_CONF || return 0
+
+    msg  "$_Updating_grub_config_to_X_" "$(pq 2.0)"
+
+    vmsg 7  "$_Using_BIOS_UUID_X_" "$(pq $bios_uuid)"
+
+    [ -z "$bios_uuid" ] && return 1
+
+    local efi_uuid efi_uuid_file=$boot_mp/$UEFI_UUID_FILE
+    test -r $efi_uuid_file || return 1
+    read efi_uuid 2>/dev/null <$efi_uuid_file
+
+    vmsg 7 'EFI UUID: %s' "$efi_uuid"
+    [ ${#efi_uuid} -gt 0 ] || return 1
+
+    local efi_mp=/live/efi
+    mkdir -p $efi_mp
+    local dev=$(uuid_to_dev $efi_uuid)
+    vmsg 7 'EFI device; %s'  "$dev"
+    test -b "$dev" || return 1
+
+    log_cmd mount "$dev" "$efi_mp"
+    mountpoint -q $efi_mp || return 1
+
+    local efi_grub_dir="$efi_mp/boot/grub"
+    log_cmd rm -rf   "$efi_grub_dir"
+    log_cmd mkdir -p "$efi_grub_dir"
+
+    local efi_grub_cfg="$efi_grub_dir/grub.cfg"
+    log_cmd cp $boot_mp/$EFI_GRUB_CONF $efi_grub_cfg
+
+    sed -i "/^\s*#/! s/%UUID%/$bios_uuid/" $efi_grub_cfg
+
+    if grep -q "^[^#]*%ID_FILE%" $efi_grub_cfg ; then
+        local rand_file=/boot/grub/config/$(random_string).id
+        log_cmd touch $boot_mp$rand_file
+        sed -i "/^\s*#/! s|%ID_FILE%|$rand_file|" $efi_grub_cfg
+    fi
+
+    sync
+
+    breakpoint F "After updating grub config from old LUM"
+
+    umount $efi_mp
+
+    touch $boot_mp/$DID_EFI_FILE
+    return 0
+}
+
+#------------------------------------------------------------------------------
+# Create a random hex string $cnt * 2 chars long
+#------------------------------------------------------------------------------
+random_string() {
+    local cnt=${1:-16}
+    dd if=/dev/urandom status=none bs=1 count=$cnt | od -An -x | tr -d " "
+}
+
 #------------------------------------------------------------------------------
 #
 #------------------------------------------------------------------------------
@@ -6068,6 +6190,8 @@ prepare_switch_root() {
     mount_tmpfs $new_root/media  10 /media
     mount_tmpfs $new_root/run    10 /run        mode=755,nodev
     mount_tmpfs $new_live        10 $live_dir   mode=755
+
+    [ "$NO_TMP_TMP" ] || mount_tmpfs $new_root/tmp 10 /tmp mode=755
 
     ln -s . $new_live/live
 
@@ -6133,6 +6257,10 @@ prepare_switch_root() {
     (cd $new_root && mkdir -p sys proc dev/pts)
 }
 
+#------------------------------------------------------------------------------
+# Removes service symlinks from a given runlevel.  Used to get lightdm out of
+# runlevel 3.
+#------------------------------------------------------------------------------
 remove_from_runlevel() {
     local prog=$1  level=${2:-3}  root=${3:-/live/aufs}
     test -d $root || root=
@@ -6144,23 +6272,6 @@ remove_from_runlevel() {
     test -z "$links" && return
     sed -r -i "/^#\s+Default-Start:/ s/\<$level\>//" $file
     rm -f $links
-}
-
-#------------------------------------------------------------------------------
-#
-#------------------------------------------------------------------------------
-dummy_translate() {
-    msg 'default size: %s Meg' "$(nq $default_size)"
-    vmsg 6  "Have %s Megabytes free.  Need %s" "$(nq $have_meg)" "$(nq $need_meg)"
-    vmsg 1  "$_Default_size_X_Meg_Filesystem_type_Y_" $(nq $default_size) $(pq ext4)
-    vmsg 1  "$_This_default_size_will_leave_X_Meg_free_" $(nq $((avail - default_size)))
-    warn  "Warning: this can take several minutes per Gig on a %s file system" $(pqw $part_fstype)
-    vmsg 1  "$_There_is_X_Meg_available_on_the_device_" $(nq $avail)
-    vmsg 1  "$_Filesystem_size_X_Meg_" $(nq $fs_size)
-    vmsg 1  "$_Create_X_file_of_type_Y_and_size_Z_Meg_" "$(fq $file)" "$(pq $fs_type)" "$(nq $fs_size)"
-    vmsg 5  "$_Copy_X_Megabytes_to_RAM_" "${num_co}$persist_used${m_co}"
-    msg  "$_There_are_X_Meg_of_files_that_will_get_hidden_by_home_persistence_"  $(nq $needed)
-    msg  "$_There_are_X_Meg_free_on_the_home_persistence_device_"                $(nq $avail)
 }
 
 #------------------------------------------------------------------------------

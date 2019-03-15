@@ -1,0 +1,10 @@
+   1)  Standard
+   2)  persist_all     Hurtig. Gemmer rod og hjem (bruger RAM, gemmes ved nedlukning)
+   3)  persist_root    Hurtig. Gemmer kun rod (bruger RAM, gemmes ved nedlukning)
+   4)  persist_static  Langsom. Gemmer rod og hjem (ingen anvendelse af RAM, gemmes konstant)
+   5)  persist_home    Kun vedvarenhed for hjem
+   6)  frugal_persist  Sparsommelig med vedvarenhed af både rod og hjem
+   7)  frugal_root     Sparsommelig kun med vedvarenhed af rod
+   8)  frugal_static   Sparsommelig med vedvarenhed af hjem og statisk rod
+   9)  frugal_home     Sparsommelig kun med vedvarenhed af hjem
+  10)  frugal_only     Kun sparsommelig, ingen vedvarenhed

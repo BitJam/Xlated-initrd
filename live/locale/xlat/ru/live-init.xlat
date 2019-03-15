@@ -22,7 +22,6 @@ _Localizing_configuring_X_Windows_="Локализация/настройка X-
 _Localizing_menus_to_X_in_Y_="Локализация меню на %s в %s"
 _Localizing_source_repos_using_X_="Локализация репозитория исходных кодов, используя %s"
 _Mounting_all_devices_="Монтирование всех устройств"
-_No_default_user_X_found_on_the_system_="Не найден пользователь по умолчанию %s в системе."
 _Not_creating_or_populating_X_="Нет создания или заполнения %s"
 _Populating_X_directory_="Заполнение директории %s"
 _Removing_previous_auto_generated_X_file_="Удаление предыдущего автоматически сгенерированного файла %s"

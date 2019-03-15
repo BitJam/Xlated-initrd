@@ -26,7 +26,6 @@ _Localizing_configuring_X_Windows_="Localizzazione/Configurazione di X-Windows i
 _Localizing_menus_to_X_in_Y_="Localizzazione dei menù da %s a %s"
 _Localizing_source_repos_using_X_="Si localizzano i repository usando %s"
 _Mounting_all_devices_="Montaggio di tutti i dispositivi"
-_No_default_user_X_found_on_the_system_="Nessun utente di default %s è stato trovato nel sistema."
 _Not_creating_or_populating_X_="Nessun inserimento di dati o creazione di %s"
 _Populating_X_directory_="Riempimento della directory %s in corso"
 _Removing_previous_auto_generated_X_file_="Rimozione del precedente file auto-generato %s"

@@ -80,7 +80,6 @@ automount=off|amnt=off)                          AUTOMOUNT_OFF=true ;;
     automount=*|amnt=*)     CMD_MOUNT=$value ;       AUTOMOUNT=true ;;
                mount=*)     CMD_MOUNT=$value                        ;;
                fstab=*)     CMD_FSTAB=$value                        ;;
-               nofstab)      NO_FSTAB=true                          ;;
            desktheme=*)    DESK_THEME=$value                        ;;
                 norepo)       NO_REPO=true                          ;;
               norepo=*)   IGNORE_REPO=$value                        ;;
@@ -92,6 +91,7 @@ automount=off|amnt=off)                          AUTOMOUNT_OFF=true ;;
                  issue)   FORCE_ISSUE=true                          ;;
              vboxdecor)    VBOX_DECOR=true                          ;;
          i915powersave) ENABLE_I915_POWER_SAVE=true                 ;;
+           nomicrocode) NO_MICRO_CODE=true                          ;;
     esac
 done
 
@@ -115,6 +115,13 @@ main() {
 
 do_start() {
     echo_script "$_Localizing_configuring_X_Windows_" $0
+
+    local mc_file=/sys/devices/system/cpu/microcode/reload
+
+    if [ -z "$NO_MICRO_CODE" -a -e "$mc_file" ]; then
+        echo_live "$_Load_microcode_"
+        echo 1 > $mc_file
+    fi
 
     get_init_param DISTRO ""
 
@@ -140,7 +147,7 @@ do_start() {
     local user_automount
     [ -n "$HAVE_X" -a -e $AUTOMOUNT_CMD -a -z "$CMD_FSTAB" ] && user_automount=true
 
-    [ "$NO_FSTAB" ] || create_fstab "$DISTRO" "$user_automount"  "$CMD_FSTAB" "$CMD_MOUNT"
+    create_fstab "$DISTRO" "$user_automount"  "$CMD_FSTAB" "$CMD_MOUNT"
 
     #-jbb: for debugging
     unset COUNTRY WM_LANG KEYBOARDS KEYTABLE LANG MIRROR TZ XKBLAYOUT CONSOLE_FONT
@@ -196,15 +203,14 @@ do_start() {
     # and such.  First check the default user for SLiM and lightdm.  Then get
     # more desparate.
 
-    DEF_USER=$(find_def_user)
+    unset DEF_USER USER_HOME
 
-    eval "USER_HOME=~$DEF_USER"
-
-    if [ -z "$DEF_USER" -o -z "${USER_HOME##~*}" ]; then
-        #. No default user <USER-NAME> found on the system.
-        echo_live "$_No_default_user_X_found_on_the_system_" "$(pquote $DEF_USER)"
+    if ! find_def_user $DISTRO; then
+        echo_live "$_No_default_user_found_on_the_system_"
         return
     fi
+
+    echo_live "$_Found_default_user_X_"  "$(pquote $DEF_USER)"
 
     create_home "$DEF_USER" "$USER_HOME"
 
@@ -1009,7 +1015,11 @@ write_issue_file() {
     (   imsg "Welcome to %s! Powered by %s" "$(iq $pretty_name)" "$(iq Debian)."
         if [ -n "$installer" ]; then
             echo
-            imsg "For command line install, login as %s (password=%s)." "$(iq root)" "$(iq root)"
+            if test -e /live/config/persist-root; then
+                imsg "For command line install, login as %s." "$(iq root)"
+            else
+                imsg "For command line install, login as %s (password=%s)." "$(iq root)" "$(iq root)"
+            if
             imsg "Enter the command %s.  Follow the instructions." "$(iq $installer)"
         fi
         if [ -n "$cli_cc" ]; then
@@ -1033,12 +1043,58 @@ iq() { echo "$bold_co$*$issue_co" ; }
 #-------------------------------------------------------------------------------
 # DEFAULT USER stuff
 #-------------------------------------------------------------------------------
+
 find_def_user() {
-    local user=$(sed -r -n 's/^\s*default_user\s+//p' /etc/slim.conf 2>/dev/null | tail -n1)
-    : ${user:=$(sed -r -n 's/^\s*autologin-user=//p' /etc/lightdm/lightdm.conf 2>/dev/null | tail -n1)}
-    : ${user:=$(getent passwd 1000 | cut -d: -f1)}
-    : ${user:=demo}
-    echo ${user%% *}
+    local distro=$1
+    USER_HOME=  DEF_USER=
+
+    case $distro in
+        MX|MX-*) valid_user $(mx_user) && return 0
+                 valid_user $(ax_user) && return 0 ;;
+
+              *) valid_user $(ax_user) && return 0
+                 valid_user $(mx_user) && return 0 ;;
+    esac
+
+    local uid
+    for uid in $(cut -d: -f3 /etc/passwd | sort -n); do
+        [ -z "$uid" ]     && continue
+        [ $uid -lt 1000 ] && continue
+        valid_user $(getent passwd $uid | cut -d: -f1) && return 0
+    done
+
+    return 1
+}
+
+#------------------------------------------------------------------------------
+# Get default user from slim.conf and lightdm.conf
+#------------------------------------------------------------------------------
+ax_user() { sed -r -n 's/^\s*default_user\s+([^\s]+)/\1/p' /etc/slim.conf 2>/dev/null | tail -n1 ; }
+mx_user() { sed -r -n 's/^\s*autologin-user=([^\s]+)/\1/p' /etc/lightdm/lightdm.conf 2>/dev/null | tail -n1 ; }
+
+#------------------------------------------------------------------------------
+# A valid user must:
+#    be a user
+#    have a uid >= 1000
+#    have a /bin/*sh login shell
+#    have a home directory under /home/
+#
+# Return results in DEF_USER and USER_HOME
+#------------------------------------------------------------------------------
+valid_user() {
+    local user=$1
+    [ -z "$user" ] && return 1
+
+    #echo "try: $user"
+    local ent=$(grep "^$user:.*:/home/.*:/bin/.*sh$" /etc/passwd)
+    local uid=$(echo $ent | cut -d: -f3)
+    [ -z "$uid" ] && return 1
+    [ $uid -lt 1000 ] && return 1
+
+    USER_HOME=$(echo $ent | cut -d: -f6)
+    DEF_USER=$user
+    #echo "found: $user"
+    return 0
 }
 
 #------------------------------------------------------------------------------
