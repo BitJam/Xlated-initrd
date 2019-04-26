@@ -35,6 +35,11 @@ do_start() {
 
     . $INITRD_OUT
 
+    CRIPPLED_FS=
+    case $BOOT_FSTYPE in
+        vfat|ntfs*) CRIPPLED_FS=true ;;
+    esac
+
     local bdir root_dir
     for bdir in $SQFILE_DIR $TORAM_MP; do
         [ -d $bdir ] || continue
@@ -54,7 +59,7 @@ do_start() {
 
     if [ "$DISABLE" ]; then
         echo_live "$_Disabling_live_usb_storage_"
-        rmdir /root/$STORAGE_BIND $USER_HOME/$STORAGE_BIND 2>/dev/null
+        rmdir /root/$STORAGE_BIND /home/*/$STORAGE_BIND 2>/dev/null
         return
     fi
 
@@ -108,7 +113,7 @@ create_user_storage() {
         return
     fi
 
-    if [ "$BOOT_FSTYPE" = vfat -a $uid -ne 0 -a $uid -ne $USER_UID ]; then
+    if [ -n "$CRIPPLED_FS" -a $uid -ne 0 -a $uid -ne $USER_UID ]; then
         echo_live "$_Can_only_use_X_storage_with_UID_of_Y_" "$(pquote vfat live-usb)" "$(pquote $USER_UID)"
         return
     fi
@@ -123,7 +128,7 @@ create_user_storage() {
     chown $uid:$gid $from_dir
 
     mkdir -p $store_dir
-    [ "$BOOT_FSTYPE" != vfat ] && chown $uid:$gid $store_dir
+    [  -z "$CRIPPLED_FS" ] && chown $uid:$gid $store_dir
 
     if mountpoint -q $from_dir; then
         echo_live "$_Directory_X_is_already_a_mountpoint_" "$(pquote $from_dir)"
