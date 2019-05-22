@@ -125,7 +125,6 @@ _Select_number_of_console_columns_="Scegli il numero delle colonne della console
 _Set_font_to_X_="Impostato font su %s"
 _Size_of_copy_X_="Dimensione della copia %12s"
 _Size_of_original_X_="Dimensione dell'originale %12s"
-_Skip_Error_X_="Salta l'errore: %s"
 _Strange_couldnt_move_the_homefs_mountpoint_="Strano, non si può spostare il punto di montaggio homefs"
 _Success_All_X_files_passed_="Successo! Tutti i %s file sono stati approvati"
 _Success_The_file_passed_="Successo! Il file è approvato"

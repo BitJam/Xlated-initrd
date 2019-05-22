@@ -125,7 +125,6 @@ _Select_number_of_console_columns_="Sélectionnez le nombre de colonnes de la co
 _Set_font_to_X_="Définir la police de caractère sur %s"
 _Size_of_copy_X_="    Taille de la copie %12s"
 _Size_of_original_X_="  Taille de l'original %12s"
-_Skip_Error_X_="Omission de l'erreur: %s"
 _Strange_couldnt_move_the_homefs_mountpoint_="Étrange, impossible de déplacer le point de montage homefs"
 _Success_All_X_files_passed_="Réussite! Tous les fichiers %s sont acceptés"
 _Success_The_file_passed_="Réussite! Fichier accepté"

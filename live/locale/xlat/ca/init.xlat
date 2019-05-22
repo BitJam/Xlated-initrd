@@ -126,7 +126,6 @@ _Select_number_of_console_columns_="Seleccioneu el nombre de columnes del termin
 _Set_font_to_X_="Font configurada a %s"
 _Size_of_copy_X_="     Mida de la còpia %12s"
 _Size_of_original_X_="   Mida de l'original %12s"
-_Skip_Error_X_="Ignora l'error: %s"
 _Strange_couldnt_move_the_homefs_mountpoint_="És estrany, no s'ha pogut moure el punt de muntatge de homefs"
 _Success_All_X_files_passed_="Èxit! Tots els fitxers %s han passat"
 _Success_The_file_passed_="Èxit! El fitxer ha passat"

@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.12.22"
-           VERSION_DATE="Thu May  9 03:30:18 MDT 2019"
+                VERSION="8.12.25"
+           VERSION_DATE="Tue 21 May 2019 07:26:34 PM MDT"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -133,10 +133,13 @@ KMS_VIDEO_MODULES="amdgpu,analogix-anx78xx,ast,bochs-drm,ch7006,cirrus,gma500_gf
 
   MIN_SCREEN_WIDTH=80
   DEF_SCREEN_WIDTH=120
+         CON_WIDTH=120
 
       DID_EFI_FILE="boot/grub/config/did-efi-grub"
      EFI_GRUB_CONF="boot/grub/config/efi-grub.cfg"
     UEFI_UUID_FILE="antiX/esp-uuid"
+         SWAP_FILE="/live/boot-dev/swap-file"
+   USB_DIRTY_BYTES=20000000
 
      LIVE_LOGS_DIR="live-logs"
 
@@ -214,7 +217,7 @@ main_wrapper() {
     set_colors "$NO_COLOR" "$LOW_COLOR"
 
     read_xlat init $LANG
-    set_console_width "$CON_WIDTH" "$LANG"
+    set_console_width "$CON_WIDTH" "$LANG" 6
 
     # disable console screen blanking
     printf "\e[9;0]\e[14;0]"
@@ -505,6 +508,8 @@ main_core() {
     # Check for ehci warning
     dmesg | grep 'Warning.*ehci' >&2
 
+    make_swap_file "$SWAP_FILE"  "$SWAP_FILE_SIZE"
+
     breakpoint 5 "after mounting persistence device"
 
     fsck_any_device "$SQFILE_DEV" "$SQFILE_MP" boot
@@ -700,6 +705,8 @@ read_late_cmdline_params() {
 
                         nostore) NO_STORE=true                        ;;
                         dostore) DO_STORE=true                        ;;
+
+                 mk_swap_file=*) SWAP_FILE_SIZE=$value                ;;
         esac
     done
 }
@@ -869,6 +876,8 @@ read_cmdline_params()
               private|private=*)  ;;
                           toram)  ;;
                     toram_store)  ;;
+
+                 mk_swap_file=*)  ;;
 
         # Convenience short cuts from our menus
                     persist_all)  ;;
@@ -1091,7 +1100,7 @@ read_xlat() {
 #
 #------------------------------------------------------------------------------
 set_console_width() {
-    local width=${1:-$DEF_SCREEN_WIDTH}  lang=$2  dir=${3:-$LOCALE_DIR/fonts}
+    local width=${1:-$DEF_SCREEN_WIDTH}  lang=$2  verb=${3:-5} dir=${4:-$LOCALE_DIR/fonts}
     local def_size=8  name=Terminus  ext=.psf
 
     # allow conwidth=aa,bb
@@ -1170,7 +1179,7 @@ set_console_width() {
     fi
 
     [ "$NO_CLEAR" ] || clear
-    vmsg 5  "$_Set_font_to_X_" "$(pq $font)"
+    vmsg $verb  "$_Set_font_to_X_" "$(pq $font)"
 
     log_cmd setfont $file -C $(tty)
 
@@ -1565,14 +1574,9 @@ from_filter() {
         case $(stat -c %t $dev) in
 
             b) cd_devs="$cd_devs $dev" ;;
-           b3) mmc_devs="$mmc_devs $dev"
-               if is_removable $dev; then
-                    usb_devs="$usb_devs $dev"
-                else
-                    hd_devs="$hd_devs $dev"
-                fi ;;
 
-   3|8|22|103) if is_usb_or_removable $dev; then
+            3|8|16|b3|ca|fe|103)
+                if is_usb_or_removable $dev; then
                     usb_devs="$usb_devs $dev"
                 else
                     hd_devs="$hd_devs $dev"
@@ -2291,7 +2295,7 @@ find_crypt_or_linuxfs() {
         msg  "$_Looking_for_encrypted_device_with_uuid_X_" "$(pq "$CRYPT_UUID")"
         for try in $(seq 1 $BOOT_RETRY); do
 
-            devs=$(uuid_to_dev $CRYPT_UUID  "$_TYPE_crypto_LUKS_")
+            devs=$(uuid_to_dev $CRYPT_UUID 'TYPE=.crypto_LUKS')
             [ -n "$devs" ] && break
             echo -n "."
             sleep 1
@@ -3761,6 +3765,7 @@ do_early_menus() {
                 read_xlat init $LANG       ;;
     esac
 
+    vmsg 1  "$_Console_columns_is_currently_set_to_X_" "$(pq $CON_WIDTH)"
     my_select_menu  "$_Select_number_of_console_columns_"   "$_Wider_means_a_smaller_font_"    w conwidth  "$_Console_columns_"  'conwidth=*'
 
     case $MENU_VALUE in
@@ -4268,6 +4273,113 @@ prog_copy() {
 
     return 0
 }
+
+#------------------------------------------------------------------------------
+# Show a progress arrow while doing "dd" command
+#------------------------------------------------------------------------------
+prog_dd() {
+    local dest=$1  cnt=$2  src=${3:-/dev/zero}  bs=${4:-1M}
+
+    local err_file=/dd-copy-failed
+    # TEST directories or fatal error
+
+    mkdir -p "$(dirname "$dest")"
+    if [ "$NO_PROGRESS" ]; then
+        dd if=$src of=$dest bs=$bs count=$cnt status=none
+        return $?
+    fi
+
+    rm -f "$file"
+    local final_size=$cnt  base_size=0
+
+    local dirty_ratio dirty_bytes
+    read dirty_ratio < /proc/sys/vm/dirty_ratio
+    read dirty_bytes < /proc/sys/vm/dirty_bytes
+    echo $USB_DIRTY_BYTES > /proc/sys/vm/dirty_bytes
+
+    rm -f $err_file
+    (dd if=$src of=$dest bs=$bs count=$cnt status=none || echo $? > $err_file)  &
+    COPY_PID=$!
+    #echo "copy pid: $COPY_PID" >> $LOG_FILE
+
+    # Disable cursor
+    printf "\e[?25l"
+
+    local cur_size=$base_size cur_pct last_pct=0
+    while true; do
+        if ! test -d /proc/$COPY_PID; then
+            echo 1000
+            break
+        fi
+        sleep 0.1
+
+        cur_size=$(du_size $dest)
+        cur_pct=$((cur_size * 1000 / final_size))
+        [ $cur_pct -gt $last_pct ] || continue
+        echo $cur_pct
+        last_pct=$cur_pct
+
+    done | text_progress
+
+    echo
+
+    sync ; sync
+
+    # Enable cursor
+    printf "\e[?25h"
+
+    echo $dirty_bytes >> /proc/sys/vm/dirty_bytes
+    echo $dirty_ratio >> /proc/sys/vm/dirty_ratio
+
+    # Use err_file as a semaphore from (...)& process
+    if test -e $err_file; then
+        rm -f $err_file
+        return 2
+    fi
+
+    test -d /proc/$COPY_PID && wait $COPY_PID
+
+    return 0
+}
+
+#------------------------------------------------------------------------------
+# chreat a zeroed out swap file, if it doesn't exist and if a size is given
+# and the size is reasonable.  We let live-init run the mkswap command if
+# if needed since it is aleady in a chroot.
+#------------------------------------------------------------------------------
+make_swap_file() {
+    local file=$1  size=$(echo $2 | tr 'mg' 'MG')  raw_size=$2
+    [ -z "$size" ]  && return
+    test -e "$file" && return
+
+    local dir=$(dirname "$file")
+    local free_space=$(free_space "$dir")
+    local megs  factor=
+    case $size in
+        [0-9]*[0-9]) megs=${size%M} ; factor=1    ;;
+                 *M) megs=${size%M} ; factor=1    ;;
+                 *G) megs=${size%G} ; factor=1024 ;;
+    esac
+
+    msg "Freespace: $free_space"
+
+    if [ -z "$factor" ] || ! echo "$megs" | grep -q "^[0-9]\+$"; then
+        warn  "$_Invalid_X_option_Y_" 'mk_swap_file=' "$(pqw $raw_size)"
+        return
+    fi
+    megs=$((megs * factor))
+
+    msg "Megs: $megs"
+
+    if [ $((free_space - megs)) -lt 10 ]; then
+        warn  "$_Not_enough_space_to_create_a_X_swap_file_" "$(pqw $raw_size)"
+        return
+    fi
+
+    msg  "$_Creating_X_swap_file_at_Y_Please_be_patient_" "$(pq $raw_size)" "$(pq $file)"
+    prog_dd "$file" "$megs"
+}
+
 #------------------------------------------------------------------------------
 # This acts like an external program to draw a progress bar on the screen.
 # It expects integer percentages as input on stdin to move the bar.
@@ -4391,8 +4503,8 @@ copy_files() {
 all_space()      { $LIVE_BIN/df -Pm "$1" | awk '{size=$2}END{print size}' ;}
 used_space()     { $LIVE_BIN/df -Pm "$1" | awk '{size=$3}END{print size}' ;}
 avail_space()    { $LIVE_BIN/df -Pm "$1" | awk '{size=$4}END{print size}' ;}
-du_size()        { du -scm "$@"         | tail -n1 | cut -f1             ;}
-get_mountpoint() { grep "^$1 " /proc/mounts | cut -d" " -f2              ;}
+du_size()        { du -scm "$@"          | tail -n1 | cut -f1             ;}
+get_mountpoint() { grep "^$1 " /proc/mounts | cut -d" " -f2               ;}
 
 #------------------------------------------------------------------------------
 # This compensates for sparse rootfs and homefs files one directory down from
@@ -6250,7 +6362,13 @@ prepare_switch_root() {
     mount_tmpfs $new_root/run    10 /run        mode=755,nodev
     mount_tmpfs $new_live        10 $live_dir   mode=755
 
-    [ "$NO_TMP_TMP" ] || mount_tmpfs $new_root/tmp 10 /tmp mode=1777
+    mkdir -p -m 777 $new_root/run/lock
+    ln -s ../dev/shm $new_root/run/shm
+
+    rm -f $new_root/etc/resolv.conf
+    ln -s ../run/resolvconf/resolv.conf $new_root/etc/resolv.conf
+
+    [ -z "$NO_TMP_TMP" ] && $LIVE_BIN/mount -t tmpfs -o noatime tmpfs $new_root/tmp
 
     ln -s . $new_live/live
 
@@ -6265,6 +6383,8 @@ prepare_switch_root() {
     breakpoint 0 before move
 
     # cp -a /bin/shutdown $new_live/
+
+    cp /init $new_live
 
     mkdir -p $new_live/oldroot
 

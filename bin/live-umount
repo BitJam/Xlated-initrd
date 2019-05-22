@@ -54,6 +54,9 @@
 VERSION="0.91"
 VERSION_DATE="Sat May 11 02:09:10 MDT 2013"
 
+# Note: this does not start with "/live" because we have already pivoted
+SWAP_FILE="/boot-dev/swap-file"
+
 me=${0##*/}
 
      NEW_ROOT=/live
@@ -109,6 +112,13 @@ do_scripts() {
     export PATH
 
     breakpoint s1 "Before running scripts"
+
+    # run the brightness shutdown script when using sysvinit
+    if ! test -e /live/config/systemd; then
+        if test -x /etc/init.d/brightness; then
+            /etc/init.d/brightness stop
+        fi
+    fi
 
     if test -e /live/config/remasterable; then
         seed_file=$(cat /live/config/seed-file 2>/dev/null)
@@ -327,6 +337,11 @@ final_umount() {
     kill_procs_fast
 
     breakpoint 7 "After killing processes"
+
+    if grep -q "^$SWAP_FILE" /proc/swaps; then
+        msg  "$_Disable_live_swapfile_"
+        swapoff "$SWAP_FILE"
+    fi
 
     msg  "$_Unmount_most_filesystems_"
     kill_specific_progs $KILL_PROGS

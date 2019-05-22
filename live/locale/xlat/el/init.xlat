@@ -124,7 +124,6 @@ _Select_number_of_console_columns_="Επιλέξτε τον αριθμό των 
 _Set_font_to_X_="Ρύθμιση γραμματοσειρά σε %s"
 _Size_of_copy_X_="    Μέγεθος αντιγράφου %12s"
 _Size_of_original_X_="   Μέγεθος της αρχικής %12s"
-_Skip_Error_X_="Μετάβαση Σφάλμα: %s"
 _Strange_couldnt_move_the_homefs_mountpoint_="Παράξενο, δεν μπορούσε να κινηθεί το σημείο προσάρτησης homefs"
 _Success_All_X_files_passed_="Επιτυχία! Όλα τα αρχεία %s πέρασαν"
 _Success_The_file_passed_="Επιτυχία! Το αρχείο πέρασε"
