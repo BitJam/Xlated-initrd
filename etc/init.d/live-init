@@ -790,6 +790,7 @@ detect_any_video_driver() {
         #. Found <KMS> video module(s) <module-name(s)>
         echo_live "$_Found_X_video_module_s_Y_" KMS "$(pquote $(echo $FOUND_KMS_DRIVER))"
         FOUND_i915=$(echo $FOUND_KMS_DRIVER | grep "^i915$")
+        [ -z "$NO_MODESET" ] && touch /live/config/modeset
         #blacklist_radeon "$FOUND_KMS_DRIVER" "$XORG_ARGS"
     else
         echo_live "$_Found_X_video_module_s_Y_" "" "$(pquote $(echo $video_modules))"
