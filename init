@@ -25,8 +25,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.20.03"
-           VERSION_DATE="Wed 29 May 2019 11:01:35 AM MDT"
+                VERSION="8.20.05"
+           VERSION_DATE="Thu 30 May 2019 11:45:35 PM MDT"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -143,7 +143,7 @@ KMS_VIDEO_MODULES="amdgpu,analogix-anx78xx,ast,bochs-drm,ch7006,cirrus,gma500_gf
 
      LIVE_LOGS_DIR="live-logs"
 
-       TSPLASH_TTY=7
+       TSPLASH_TTY=10
             MY_TTY=1
 
     #           HUP INT QUIT SEGV TERM
@@ -335,6 +335,8 @@ main_wrapper() {
 
     dmesg > $NEW_ROOT/live/config/dmesg.out
 
+    [ "$DO_TSPLASH" ] && openvt -w -c $TSPLASH_TTY /live/bin/tsplash progress init
+
     breakpoint 9     "right before starting init"
 
     stop_hotplug
@@ -347,7 +349,6 @@ main_wrapper() {
 
     #tsplash_progress init
 
-    open_vt -w -c $TSPLASH_TTY /live/bin/tsplash progress init
     copy_tsplash $NEW_ROOT
 
     write_log_files $MY_LOG $NEW_ROOT/$LOG_FILE
@@ -761,9 +762,13 @@ read_cmdline_params()
             rootdelay=*|delay=*) small_int COLDPLUG_DELAY $param                 ;;
                          splash) SPLASH_PARAM=v                                  ;;
                        splash=*) SPLASH_PARAM=$value                             ;;
-                        tsplash) DO_TSPLASH=true                                 ;;
-                      tsplash=*) DO_TSPLASH=$value                               ;;
-                        tstty=*) TSPLASH_TTY=$value                              ;;
+                splasht|tsplash) DO_TSPLASH=Z                                    ;;
+            splasht=*|tsplash=*) DO_TSPLASH=$value                               ;;
+
+               splash_t=*|s_t=*) DO_TSPLASH=$value                               ;;
+                   splash_t|s_t) DO_TSPLASH=Z                                    ;;
+
+                       st_tty=*) TSPLASH_TTY=$value                              ;;
                       console=*) CMD_MY_TTY=${value#tty}                         ;;
                       CONSOLE=*) CMD_MY_TTY=${value#tty}                         ;;
                        poweroff) poweroff -f -n                                  ;;
@@ -6387,7 +6392,7 @@ start_tsplash() {
     sed -r -i "s/^(tty)=.*/\1=$TSPLASH_TTY/" /bin/tell-tsplash
     sed -r -i "s/tty[0-9]+/tty$TSPLASH_TTY/" /bin/clear-tsplash
 
-    openvt -s -c $TSPLASH_TTY tsplash start
+    openvt -s -c $TSPLASH_TTY tsplash start "$DO_TSPLASH"
 }
 
 tsplash_enabled()  { [ -n "$DO_TSPLASH" ]; return $?        ; }
