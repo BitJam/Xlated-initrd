@@ -26,8 +26,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.20.07"
-           VERSION_DATE="Fri 31 May 2019 06:23:15 PM MDT"
+                VERSION="8.20.08"
+           VERSION_DATE="Sun 02 Jun 2019 02:23:54 AM MDT"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -181,7 +181,6 @@ lbar="<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<"
 
 
 main_wrapper() {
-
     local black blue green cyan red purple brown lt_gray dk_gray lt_blue
     local lt_green lt_cyan lt_red magenta yellow white rev_red
     local cheat_co cmd_co dev_co err_co from_co to_co head_co
@@ -215,7 +214,7 @@ main_wrapper() {
     read_cmdline_params
     select_breakpoints
 
-    start_tsplash
+    tsplash_start
 
     FREE_MEM=$(mem_info MemFree)
 
@@ -226,13 +225,12 @@ main_wrapper() {
     read_xlat init $LANG
     set_console_width "$CON_WIDTH" "$LANG" 6
 
-    [ "$TSPLASH_ERROR" ] && non_fatal  "$_The_X_feature_requires_the_Y_boot_parameter_" 'tsplash' 'console=tty1'
-
     # disable console screen blanking
     printf "\e[9;0]\e[14;0]"
 
     echo "$PRINTK" > /proc/sys/kernel/printk
 
+    # Just in case it didn't get set in set_console_width
     SCREEN_WIDTH=$(stty size 2>/dev/null | cut -d" " -f2)
 
     [ -z "${FINAL_DIR##/*}" ] || FINAL_DIR="/$FINAL_DIR"
@@ -262,7 +260,7 @@ main_wrapper() {
 
     # Need to run persist-password outside of our error catching
 
-    tsplash_progress scripts-start
+    tsplash_progress  "$_run_live_scripts_"
 
     breakpoint 8      "before running live init.d scripts"
     breakpoint b8     "Bash shell before running live init.d scripts"
@@ -297,7 +295,7 @@ main_wrapper() {
 
     late_umount $BIOS_DEV
 
-    tsplash_progress scripts-end
+    #tsplash_progress "start init"
 
     if [ -z "$DISABLE_STORE" ]; then
         if detect_old_persist_scripts $NEW_ROOT; then
@@ -336,7 +334,7 @@ main_wrapper() {
 
     dmesg > $NEW_ROOT/live/config/dmesg.out
 
-    [ "$DO_TSPLASH" ] && openvt -w -c $TSPLASH_TTY /live/bin/tsplash progress init
+    [ "$DO_TSPLASH" ] && openvt -w -c $TSPLASH_TTY /live/bin/tsplash progress  "$_start_init_"
 
     breakpoint 9     "right before starting init"
 
@@ -350,7 +348,7 @@ main_wrapper() {
 
     #tsplash_progress init
 
-    copy_tsplash $NEW_ROOT
+    tsplash_copy $NEW_ROOT
 
     write_log_files $MY_LOG $NEW_ROOT/$LOG_FILE
     MY_LOG=$NEW_ROOT/$LOG_FILE.color
@@ -381,7 +379,9 @@ main_wrapper() {
         test -x $NEW_ROOT$INIT_COMMAND || INIT_COMMAND=/sbin/init
         vmsg 6  "Start %s process" $(pq $INIT_COMMAND)
 
-        [ "$NO_CLEAR" ] || [ "$NO_MODESET" ] || clear
+        # Note that "nomodeset" is yet again unreliable!
+        # [ "$NO_CLEAR" ] || [ "$NO_MODESET" ] || clear
+        [ "$NO_CLEAR" ] || clear
         exec $LIVE_BIN/switch_root -c /dev/tty1 $NEW_ROOT $INIT_COMMAND "$@"
     fi
 }
@@ -400,6 +400,8 @@ main_core() {
     blacklist_modules "$BLACK_LIST" "$BLACK_LIST_FILE"
 
     breakpoint 1 "before welcome"
+
+    [ "$TSPLASH_ERROR" ] && non_fatal  "$_The_X_feature_requires_the_Y_boot_parameter_" 'tsplash' 'console=tty1'
 
     # These ones must be loaded before the others
     # Add a cheap black-lister
@@ -457,13 +459,14 @@ main_core() {
 
     #[ "$SET_CRYPT" -a -z "$NO_CRYPT" ] && setup_crypt "$CRYPT_ID" "$BOOT_DIR/$CRYPT_FNAME" "$BOOT_MP"
 
-    tsplash_progress search
+    tsplash_progress  "$_search_for_boot_device_"
     breakpoint 3 "before looking for linuxfs file"
 
     RW_MODE=ro
 
     if [ "$FRUGAL_ID" ]; then
         find_frugal_file "$FRUGAL_ID" || frugal_error $?
+        tsplash_on
     else
         find_linuxfs_file
     fi
@@ -487,13 +490,14 @@ main_core() {
     SEED_FULL=$(dirname "$SQFILE_FULL")/$SEED_FNAME
     seed_dev_random "$SEED_FULL"
 
-    tsplash_progress boot-dev
+    tsplash_progress  "$_found_boot_device_"
 
     breakpoint 4 "after mounting boot device"
     mount -o remount,rw $SQFILE_DEV 2>/dev/null
     dir_has_param "$SQFILE_MP" rw || REMASTERABLE=
 
     detect_vga_menu "$CMD_VGA" "$GFX_SAVE"
+    tsplash_on
 
     if remasterable; then
         do_remaster "$SQFILE_FULL"
@@ -522,6 +526,7 @@ main_core() {
     prepare_persistence
 
     mount_persist_device "$PERSIST_FILES" "$FROM_PERSIST"
+    tsplash_on
 
     list_modules
 
@@ -577,6 +582,8 @@ main_core() {
 
     [ "$WANT_HOMEFS" ] \
         && mount_homefs $PERSIST_FULL_PATH/homefs $NEW_ROOT/home "$WANT_HOMEFS" "$NEED_HOMEFS"
+
+    tsplash_on
 
     [ "$DO_XTRA"       ] && copy_xtra    $DEFAULT_DIR
     [ "$DO_XTRA"       ] && delete_files $DEFAULT_DIR
@@ -2132,12 +2139,10 @@ find_frugal_file() {
 
     if  [ -z "$device" ]; then
 
+        tsplash_clear
         msg  "$_Looking_for_partitions_with_at_least_X_free_Please_wait_" "$(nq $(size_label_m $needed))"
-
         select_device 'frugal' device $needed not_mounted || return 2
-
         local ret=$?
-
         [ -z "$device" -o "$device" =  "$_quit_" ] && return 1
 
         [ "$LABEL_FRUGAL" ] && label_device $device "$FRUGAL_NAME-Frugal"
@@ -2263,6 +2268,7 @@ find_linuxfs_file() {
     else
 
         find_crypt_or_linuxfs
+        tsplash_on
 
         SQFILE_MP=$BOOT_MP
         SQFILE_DEV=$FOUND_DEV
@@ -2375,6 +2381,7 @@ find_crypt_or_linuxfs() {
 
     BOOT_UUID=$CRYPT_UUID
 
+    tsplash_clear
     msg  "$_Checking_for_encrypted_partition_on_device_X_" "$crypt_dev"
 
     test -e "$crypt_dev" || fatal  "$_Encrypted_device_X_does_not_exist_"                 "$(dqe $crypt_dev)"
@@ -3510,6 +3517,7 @@ YES_no() {  _yes_no 0  "$_yes_" "$@" ;}
 yes_NO() {  _yes_no 1  "$_no_"  "$@" ;}
 
 _yes_no() {
+    tsplash_clear
     local def_ret=$1  def_lab=$(cq $2)
     shift 2
     local ans title=$(printf "$m_co$@")
@@ -5123,7 +5131,6 @@ mount_persist_device() {
             unset WANT_ROOTFS WANT_HOMEFS NEED_ROOTFS NEED_HOMEFS
             return
         fi
-
     fi
 
     if [ $ret -eq 0 ]; then
@@ -5410,11 +5417,11 @@ size_menu() {
     my_select_2 "$title"  $var  "" "$data" "$display"
 }
 
-
 #------------------------------------------------------------------------------
 #
 #------------------------------------------------------------------------------
 select_persist_device() {
+    tsplash_clear
     local device label=$1
     warn
     warn  "Could not find a partition with label %s" "$(pqw $label)"
@@ -6393,7 +6400,7 @@ random_string() {
 #------------------------------------------------------------------------------
 #
 #------------------------------------------------------------------------------
-start_tsplash() {
+tsplash_start() {
     tsplash_enabled || return
 
     case $CMD_MY_TTY in
@@ -6426,7 +6433,7 @@ tsplash_on() {
 #------------------------------------------------------------------------------
 tsplash_clear() {
     tsplash_enabled || return
-    if [ -z "$TSPLASH_CLEARED" ]; then
+    if [ -z "$TSPLASH_CLEARED" -a -z "$NO_CLEAR" ]; then
         clear
         sleep .2
         TSPLASH_CLEARED=true
@@ -6437,7 +6444,7 @@ tsplash_clear() {
 #------------------------------------------------------------------------------
 #
 #------------------------------------------------------------------------------
-copy_tsplash() {
+tsplash_copy() {
     tsplash_enabled || return
     local new_dir=$1
 
