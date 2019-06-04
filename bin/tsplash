@@ -74,7 +74,7 @@ main() {
 
 
     case $cmd in
-         start)  do_start "$@" ; exit  0 ;;
+         start)  do_start "$@" ; my_exit  0 ;;
     esac
 
     #echo -e "\n---------------------------" >> $LOG_FILE
@@ -118,12 +118,12 @@ eval_cmd() {
              shutdown) clear_progress $cmd ;;
                reboot) clear_progress $cmd ;;
 
-         mk-swap-file) mk_swap_file "$@"   ;;
+         mk_swap_file) mk_swap_file "$@"   ;;
 
                 *) fatal 'Unknown command %s' "$cmd" ;;
     esac
 
-    exit 0
+    my_exit 0
 }
 
 do_clear() {
@@ -331,7 +331,7 @@ get_seconds() {
 draw_nav_keys() {
 
     local  left_press=$(mk_key_str  "$_see_boot_process_" 'Alt-F1')
-    local right_press=$(mk_key_str  "$_return_here_"      "Alt-$TTY_NUM")
+    local right_press=$(mk_key_str  "$_return_here_"      "Alt-F$TTY_NUM")
 
     left_text  $((SCREEN_BOTTOM))  "  $left_press"
     right_text $((SCREEN_BOTTOM))  "$right_press  "
@@ -510,13 +510,13 @@ log_it() {
 fatal() {
     local fmt=$1 ; shift
     printf "[%8s] Fatal: $fmt\n" "$(get_seconds)" "$@" >> $LOG_FILE
-    exit 2
+    my_exit 2
 }
 
 error() {
     local fmt=$1 ; shift
     printf "[%8s] Error: $fmt\n" "$(get_seconds)" "$@" >> $LOG_FILE
-    exit 2
+    my_exit 2
 }
 
 #------------------------------------------------------------------------------
@@ -736,24 +736,24 @@ cruler() {
 #==============================================================================
 
 #------------------------------------------------------------------------------
-# mk_swap_file <file> <megs>
+# mk_swap_file <file> <megs> [size-label]
 #------------------------------------------------------------------------------
 mk_swap_file() {
-    local file=$1  size=$2   size_lab=$3
+    local file=$1  size=$2  label=$(label_meg $2)
     set_color
     screen_init
-    verbose_progress mk_swap_file $bold_co
+    verbose_progress 'mk_swap_file' $bold_co
 
-    bar_box "Create $size swap file"
+    bar_box  "$_Create_X_swap_file_" "$label"
 
     prog_dd "$file" "$size"
     local ret=$?
 
-    sleep 1.5
+    sleep 1
     clear_prog_bar
     last_progress
-    log_it  "$_mk_swap_file_done_"
-    exit $ret
+    log_it 'mk_swap_file done'
+    my_exit $ret
 }
 
 #------------------------------------------------------------------------------
@@ -818,7 +818,8 @@ prog_dd() {
 # Draw a box around where the progress bar will go
 #------------------------------------------------------------------------------
 bar_box() {
-    local title="$*"
+    local fmt=$1 ; shift
+    local title=$(printf "$fmt" "$@")
     local width=$((PROG_BAR_WIDTH * SCREEN_WIDTH / 100 + 2))
     local x1=$((CENTER_X - width / 2))
     local y1=$((PROG_BAR_Y - 1))
@@ -830,16 +831,15 @@ bar_box() {
 }
 
 #------------------------------------------------------------------------------
-# Do a "dd" command with a progress bar
 #------------------------------------------------------------------------------
 test_prog_bar() {
     set_color
     screen_init
-    verbose_progress mk_swap_file $bold_co
-
-    bar_box  "$_Create_100M_swap_file_"
+    verbose_progress 'mk_swap_file' $bold_co
 
     local dest=$1  cnt=$2  src=${3:-/dev/zero}  bs=${4:-1M}
+
+    bar_box  "$_Creating_X_swap_file_"   100M
 
     local base_size=0
 
@@ -864,8 +864,8 @@ test_prog_bar() {
 #
 #------------------------------------------------------------------------------
 clear_prog_bar() {
-    local y  y0=$PROG_BAR_Y
-    for y in $(seq -2 1); do
+    local y  y0=$((PROG_BAR_Y - 3))
+    for y in $(seq 1 4); do
         clear_line $((y + y0))
     done
 }
@@ -920,6 +920,39 @@ text_progress() {
 }
 
 #------------------------------------------------------------------------------
+# Label sizes given in Megs (MiB)
+#------------------------------------------------------------------------------
+label_meg() { label_any_size "$1" " " MiB GiB TiB PiB EiB; }
+
+#------------------------------------------------------------------------------
+# More compact horizontally, for tables
+#------------------------------------------------------------------------------
+size_label_m() { label_any_size "$1" "" M G T P E; }
+
+#------------------------------------------------------------------------------
+# Bite the bullet and do it "right"
+#------------------------------------------------------------------------------
+label_any_size() {
+    local size=$1  sep=$2  u0=$3  unit=$4  meg=$((1024 * 1024))  new_unit ; shift 4
+
+    for new_unit; do
+        [ $size -lt $meg ] && break
+        size=$((size / 1024))
+        unit=$new_unit
+    done
+
+    if [ $size -ge 102400 ]; then
+        awk "BEGIN {printf \"%d$sep$unit\n\", $size / 1024}"
+    elif [ $size -ge 10240 ]; then
+        awk "BEGIN {printf \"%0.1f$sep$unit\n\", $size / 1024}"
+    elif [ $size -ge 1024 ]; then
+        awk "BEGIN {printf \"%0.2f$sep$unit\n\", $size / 1024}"
+    else
+        awk "BEGIN {printf \"%d$sep$u0\n\", $size}"
+    fi
+}
+
+#------------------------------------------------------------------------------
 #
 #------------------------------------------------------------------------------
 read_xlat() {
@@ -936,6 +969,15 @@ read_xlat() {
     [ -r "$xlat" ] || return
     . $xlat
     log_it 'Translate to %s' $lang
+}
+
+#------------------------------------------------------------------------------
+# Park cursor in a safe place when we exit
+#------------------------------------------------------------------------------
+my_exit() {
+    local ret=$1  y=3  x=3
+    printf "\e[$y;${x}H$nc_co$black"
+    exit $ret
 }
 
 #------------------------------------------------------------------------------
@@ -967,4 +1009,4 @@ set_color() {
 mkdir -p $WORK_DIR
 # main "$@" 2>> $LOG_FILE
 
-main "$@"
+main "$@" 2>> $WORK_DIR/errors

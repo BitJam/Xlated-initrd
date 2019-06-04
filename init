@@ -26,8 +26,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.20.08"
-           VERSION_DATE="Sun 02 Jun 2019 02:23:54 AM MDT"
+                VERSION="8.20.09"
+           VERSION_DATE="Mon 03 Jun 2019 07:32:57 PM MDT"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -41,7 +41,6 @@
     DISABLE_SERVICES_OPTS="[aABcdgkilLmnNPrsSvVwWx]+"
 
            RW_MODE="ro"
-       #DISTRO_NAME="Linux"
             PRINTK=0
 
           LIVE_DIR="/live"
@@ -214,16 +213,17 @@ main_wrapper() {
     read_cmdline_params
     select_breakpoints
 
-    tsplash_start
-
     FREE_MEM=$(mem_info MemFree)
 
     #[ -z "$NO_MODESET" -a -z "$LOW_COLOR" -a -z "$HIGH_COLOR" ] && NO_COLOR=true
     set_colors "$NO_COLOR" "$LOW_COLOR"
 
-    echo "$LANG" > $OUTPUT_DIR/lang
     read_xlat init $LANG
     set_console_width "$CON_WIDTH" "$LANG" 6
+
+    echo "$LANG" > $OUTPUT_DIR/lang
+    # Do this after we set the console font/width
+    tsplash_start
 
     # disable console screen blanking
     printf "\e[9;0]\e[14;0]"
@@ -382,7 +382,8 @@ main_wrapper() {
         # Note that "nomodeset" is yet again unreliable!
         # [ "$NO_CLEAR" ] || [ "$NO_MODESET" ] || clear
         [ "$NO_CLEAR" ] || clear
-        exec $LIVE_BIN/switch_root -c /dev/tty1 $NEW_ROOT $INIT_COMMAND "$@"
+        #exec $LIVE_BIN/switch_root -c /dev/tty1 $NEW_ROOT $INIT_COMMAND "$@"
+        exec $LIVE_BIN/switch_root $NEW_ROOT /usr/bin/env CONSOLE=/dev/tty1 $INIT_COMMAND "$@"
     fi
 }
 
@@ -590,6 +591,7 @@ main_core() {
     [ "$DO_AUTO_LOGIN" ] && auto_login   "$AUTO_LOGIN_PROG" "$AUTO_LOGIN_TERMS" "$NEW_ROOT"
     [ "$DO_FANCY"      ] && fancy_prompt "$FANCY_PROMPT" "$NEW_ROOT"
     [ "$DB_PLUS"       ] && page_updown_keys "$NEW_ROOT"
+    tsplash_enabled && [ -z "$CMD_MY_TTY" ] && disable_tty1 "$NEW_ROOT"
 
     # FIXME: do this after copy_xtra for easy testing (for now) (????)
     PROC_CMDLINE=$(cat /live/config/proc-cmdline)
@@ -715,6 +717,7 @@ read_late_cmdline_params() {
                   nousb2|noehci) NO_EHCI=true                         ;;
               private|private=*) FORCE_PASSWD=true                    ;;
                           toram) TO_RAM=true                          ;;
+                      toram_all) TO_RAM=true ; TOORAM_ALL=true        ;;
                     toram_store) TO_RAM=true ; TORAM_STORE=true       ;;
 
         # Convenience short cuts from our menus
@@ -910,6 +913,8 @@ read_cmdline_params()
               private|private=*)  ;;
                           toram)  ;;
                     toram_store)  ;;
+                      toram_all)  ;;
+
 
                  mk_swap_file=*)  ;;
 
@@ -4429,7 +4434,7 @@ make_swap_file() {
                  *G) megs=${size%G} ; factor=1024 ;;
     esac
 
-    msg "Freespace: $free_space"
+    # msg "Freespace: $free_space"
 
     if [ -z "$factor" ] || ! echo "$megs" | grep -q "^[0-9]\+$"; then
         warn  "$_Invalid_X_option_Y_" 'mk_swap_file=' "$(pqw $raw_size)"
@@ -4437,7 +4442,7 @@ make_swap_file() {
     fi
     megs=$((megs * factor))
 
-    msg "Megs: $megs"
+    # msg "Megs: $megs"
 
     if [ $((free_space - megs)) -lt 10 ]; then
         non_fatal  "$_Not_enough_space_to_create_a_X_swap_file_" "$(pqw $raw_size)"
@@ -4445,7 +4450,12 @@ make_swap_file() {
     fi
 
     msg  "$_Creating_X_swap_file_at_Y_Please_be_patient_" "$(pq $raw_size)" "$(pq $file)"
-    prog_dd "$file" "$megs"
+
+    if tsplash_enabled; then
+        tsplash_wait mk_swap_file "$file" "$megs"
+    else
+        prog_dd "$file" "$megs"
+    fi
 }
 
 #------------------------------------------------------------------------------
@@ -5743,6 +5753,15 @@ copy_homefs() {
     return 0
 }
 
+
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
+disable_tty1() {
+    local dir=$1
+    sed -r -i "s/^\s*(1:2345:respawn)/# \1/" $dir/etc/inittab
+}
+
 #------------------------------------------------------------------------------
 #
 #------------------------------------------------------------------------------
@@ -6031,6 +6050,7 @@ SQFS_VID_FILE="$SQFS_VID_FILE"
 STATIC_ROOT="$STATIC_ROOT"
 TORAM_MP="$TORAM_MP"
 TORAM_STORE="$TORAM_STORE"
+TOORAM_ALL="$TOORAM_ALL"
 USER_GID="$USER_GID"
 USER_UID="$USER_UID"
 VID_ERROR="$VID_ERROR"
@@ -6398,25 +6418,28 @@ random_string() {
 }
 
 #------------------------------------------------------------------------------
-#
+# Start up the tsplash screen on its on tty
+# Modify our scripts so we all use the same tty
 #------------------------------------------------------------------------------
 tsplash_start() {
     tsplash_enabled || return
 
+    # This does nothing now
     case $CMD_MY_TTY in
         [1-9]|1[0-2]) ;;
-        *) DO_TSPLASH= ; TSPLASH_ERROR=true ; return ;;
-  esac
+     #   *) DO_TSPLASH= ; TSPLASH_ERROR=true ; return ;;
+    esac
 
-    sed -r -i "s/^(tty)=.*/\1=$TSPLASH_TTY/" /bin/tell-tsplash
+    vmsg 6 "@ %s starting %s" "$(get_seconds)" "$(pq tsplash)"
+
+    sed -r -i "s/^(tty)=.*/\1=$TSPLASH_TTY/" /bin/tell-tsplash   /bin/tsplash-on
     sed -r -i "s/tty[0-9]+/tty$TSPLASH_TTY/" /bin/clear-tsplash
-
     openvt -s -c $TSPLASH_TTY tsplash start "$DO_TSPLASH"
 }
 
 tsplash_enabled()  { [ -n "$DO_TSPLASH" ]; return $?        ; }
 tsplash_off()      { chvt $MY_TTY                           ; }
-tsplash_progress() { [ "$DO_TSPLASH" ] && /live/bin/tell-tsplash progress "$*" ; }
+tsplash_progress() { tsplash_enabled && /live/bin/tell-tsplash progress "$*" ; }
 
 #------------------------------------------------------------------------------
 # Go back to the tsplash screen and reset the TSPLASH_CLEARED flag
@@ -6439,6 +6462,13 @@ tsplash_clear() {
         TSPLASH_CLEARED=true
     fi
     chvt $MY_TTY
+}
+
+#------------------------------------------------------------------------------
+# Wait for tsplash to finish before moving on
+#------------------------------------------------------------------------------
+tsplash_wait() {
+    openvt -w -c $TSPLASH_TTY /live/bin/tsplash "$@"
 }
 
 #------------------------------------------------------------------------------

@@ -1,5 +1,5 @@
-_Create_100M_swap_file_="Create 100M swap file"
-_mk_swap_file_done_="mk_swap_file done"
+_Create_X_swap_file_="Create %s swap file"
+_Creating_X_swap_file_="Creating %s swap file"
 _prepare_consoles_="prepare consoles"
 _return_here_="return here"
 _see_boot_process_="see boot process"
