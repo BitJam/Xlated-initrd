@@ -26,8 +26,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.20.09"
-           VERSION_DATE="Mon 03 Jun 2019 07:32:57 PM MDT"
+                VERSION="8.20.10"
+           VERSION_DATE="Tue 04 Jun 2019 01:15:23 PM MDT"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -50,6 +50,9 @@
           AUFS_DIR="aufs"
 
        EXTRA_FILES="deb xtra xtra.tgz"
+ TORAM_ALL_BDIR_FILES="vmlinuz vmlinuz1 initrd.gz"
+TORAM_ALL_OTHER_FILES="boot EFI version"
+
        MIN_SYS_RAM=80
       MIN_AUFS_RAM=80
 
@@ -68,6 +71,7 @@
       FRUGAL_FILES="linuxfs vmlinuz vmlinuz1 initrd.gz xtra xtra.tgz esp-uuid"
       FRUGAL_FILES="$FRUGAL_FILES ../boot ../efi ../EFI ../cdrom.ico ../version"
        FRUGAL_NAME="antiX"
+  DEFAULT_BOOT_DIR="antiX"
 
      MAX_MOUNT_CNT=30
        RETRY_DELAY=50               # in hundredths of a second
@@ -717,8 +721,8 @@ read_late_cmdline_params() {
                   nousb2|noehci) NO_EHCI=true                         ;;
               private|private=*) FORCE_PASSWD=true                    ;;
                           toram) TO_RAM=true                          ;;
-                      toram_all) TO_RAM=true ; TOORAM_ALL=true        ;;
-                    toram_store) TO_RAM=true ; TORAM_STORE=true       ;;
+                      toram=all) TO_RAM=true ; TORAM_ALL=true         ;;
+                    toram=store) TO_RAM=true ; TORAM_STORE=true       ;;
 
         # Convenience short cuts from our menus
                     persist_all) PERSIST='root!,home!'                ;;
@@ -912,7 +916,7 @@ read_cmdline_params()
                   nousb2|noehci)  ;;
               private|private=*)  ;;
                           toram)  ;;
-                    toram_store)  ;;
+                        toram=*)  ;;
                       toram_all)  ;;
 
 
@@ -3580,7 +3584,7 @@ my_select() {
 #------------------------------------------------------------------------------
 my_select_2() {
     local title=$1  var=$2  default=$3  data=$4  display=$5
-    local def_prompt=$(printf  "$_Press_X_for_the_default_selection_" "$(cq  "$_enter_")")
+    local def_prompt=$(printf  "$_Press_X_for_the_default_selection_" "$(cq  "$_Enter_")")
 
     local val input err_msg
     while [ -z "$val" ]; do
@@ -4346,6 +4350,16 @@ prog_copy() {
 }
 
 #------------------------------------------------------------------------------
+# Use tsplash to do the copy if it is enabled.
+#------------------------------------------------------------------------------
+tsplash_prog_copy() {
+    if tsplash_enabled; then
+        tsplash_wait copy_toram "$@"
+    else
+        prog_cp "$@"
+    fi
+}
+#------------------------------------------------------------------------------
 # Show a progress arrow while doing "dd" command
 #------------------------------------------------------------------------------
 prog_dd() {
@@ -4909,10 +4923,11 @@ copy_to_ram() {
 
     if _copy_to_ram "$@"; then
 
+        local bdir=$toram_mp/$DEFAULT_BOOT_DIR
         LINUXFS_DEV=
         SQFILE_MP=$toram_mp
-        SQFILE_DIR=$toram_mp
-        SQFILE_FULL=$toram_mp/$name
+        SQFILE_DIR=$bdir
+        SQFILE_FULL=$bdir/$name
         DEFAULT_DIR=$SQFILE_DIR
 
         log_cmd umount $SQFS_MP
@@ -4921,6 +4936,7 @@ copy_to_ram() {
     else
         mountpoint -q $toram_mp && log_cmd umount $toram_mp
         [ -d $toram_mp ]        && rmdir $toram_mp
+        non_fatal  "$_Copy_to_RAM_failed_"
     fi
     breakpoint t "After copy to ram"
 }
@@ -4928,6 +4944,7 @@ copy_to_ram() {
 _copy_to_ram() {
     local from=$1 toram_mp=$2  err_toram=$(cqe toram)
     local name=$(basename $from) dir=$(dirname $from)
+    local dir_dir=$(dirname $dir)
 
     heading  "$_copy_X_file_to_RAM_" "$(fq $name)"
     local real_sq_file=$(readlink -f $from)
@@ -4937,8 +4954,26 @@ _copy_to_ram() {
     local format2="%s: %10d k"
     vmsg 8 "$format" "$name" $sq_size_k
 
+    local extra_files=$EXTRA_FILES
+
     local extra ex_full size_k
-    for extra in $EXTRA_FILES; do
+    if [ "$TORAM_ALL" ]; then
+        extra_files="$extra_files $TORAM_ALL_BDIR_FILES"
+
+        # Get the size of the additional files/dirs we are going to copy
+        for extra in $TORAM_ALL_OTHER_FILES; do
+            ex_full="$(readlink -f $dir_dir/$extra)"
+            [ -e "$ex_full" ] || continue
+            size_k="$(du -sk $ex_full | cut -f 1)"
+            sq_size_k=$((sq_size_k + size_k))
+            vmsg 8 "$format" $extra $size_k
+            # Total [RAM needed]
+            vmsg 8 "$format2" '          Total'  $sq_size_k
+        done
+    fi
+
+    # Get the size of all extra files/dirs we are going to copy
+    for extra in $extra_files; do
         ex_full="$(readlink -f $dir/$extra)"
         [ -e "$ex_full" ] || continue
         size_k="$(du -sk $ex_full | cut -f 1)"
@@ -4966,22 +5001,32 @@ _copy_to_ram() {
     fi
 
     local orig=$dir
-    local dest=$toram_mp
+    local dest=$toram_mp/$DEFAULT_BOOT_DIR
 
     mkdir -p $dest
 
     vmsg 3  "$_Will_copy_files_from_X_to_Y_Please_be_patient_" \
         "$(dq $orig)" "$(dq $dest)"
 
-    for extra in $EXTRA_FILES; do
+    local from_list
+
+    if [ "$TORAM_ALL" ]; then
+        for extra in $TORAM_ALL_OTHER_FILES; do
+            from_list="$from_list $(readlink -f $dir_dir/$extra)"
+        done
+        log_cmd cp -a $from_list $toram_mp
+    fi
+
+    local from_list=$orig/$name
+    for extra in $extra_files; do
         local full=$(readlink -f $dir/$extra)
-        [ -e "$full" ] && cp -a $full $dest
+        [ -e "$full" ] && from_list="$from_list $full"
+        [ -e "$full.md5" ] && from_list="$from_list $full.md5"
     done
-    [ -e $from ] && cp $from.md5 $dest
 
     #if ! cp_file $orig $name $dest 2>&1; then
 
-    if ! prog_copy $dest $orig/$name; then
+    if ! tsplash_prog_copy $dest $from_list; then
         err  "Copy failed.  Cannot do %s" $err_toram
         return 3
     fi
@@ -6061,6 +6106,7 @@ Initrd_Out
 
     [ -e /sys/firmare/efi ]                  && touch $dir/uefi
     [ "$DID_TORAM"    ]                      && touch $dir/did-toram
+    [ "$TORAM_ALL"    ]                      && touch $dir/toram-all
     [ "$TORAM_STORE"  ]                      && touch $dir/toram-store
     [ "$REMASTERABLE" ]                      && touch $dir/remasterable
     [ "$PERSIST_ROOT" ]                      && touch $dir/persist-root
@@ -6221,6 +6267,7 @@ update_file() {
 #
 #------------------------------------------------------------------------------
 press_enter() {
+    # As in:  Press Enter to continue
     local ans enter="Enter"
     msg  "$_Press_X_to_continue_" "$(pq "$enter")"
     read ans
