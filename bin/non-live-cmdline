@@ -131,10 +131,6 @@ for param in $(cat /proc/cmdline); do
                        notmptmp)  ;;
                     nomicrocode)  ;;
                      nosavelogs)  ;;
-                         tty1on)  ;;
-                        splasht)  ;;
-                      splasht=*)  ;;
-                       st_tty=*)  ;;
 
         # Our Live params
         hwclock=utc|hwclock=local|xorg|xorg=*|noearlyvid|earlyvid) ;;
