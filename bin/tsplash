@@ -190,7 +190,10 @@ do_start() {
         [ -z "${param##*[VA]*}" ] && VERBOSE_PROGRESS=
         [ -z "${param##*[na]*}" ] && SHOW_NAV=true
         [ -z "${param##*[NA]*}" ] && SHOW_NAV=
+        [ -z "${param##*[ka]*}" ] && SHOW_KERNEL=true
+        [ -z "${param##*[KA]*}" ] && SHOW_KERNEL=
         [ -z "${param##*[w]*}"  ] && NAV_7=true
+
         [ -z "${param##*[W]*}"  ] && NAV_7=
     fi
 
@@ -198,8 +201,10 @@ do_start() {
 VERBOSE_PROGRESS=$VERBOSE_PROGRESS
 SHOW_BORDER=$SHOW_BORDER
 SHOW_NAV=$SHOW_NAV
+NAV_7=$NAV_7
 SCREEN_COLS=$SCREEN_COLS
 PROG_BAR_PAUSE=$PROG_BAR_PAUSE
+SHOW_KERNEL=$SHOW_KERNEL
 LANG=$LANG
 Config
 
@@ -280,7 +285,12 @@ do_redraw() {
 
     [ -n "$SHOW_BORDER" ] && box $SCREEN_BOX $lt_cyan
 
-    ctext "$WELCOME_Y" "" "$WELCOME_MSG" "$lt_cyan"
+    if [ "$SHOW_KERNEL" ]; then
+        ctext "$((WELCOME_Y -2))" "" "$WELCOME_MSG" "$lt_cyan"
+        ctext "$WELCOME_Y"        "" "$(uname -r)"  "$nc_co"
+    else
+        ctext "$WELCOME_Y" "" "$WELCOME_MSG" "$lt_cyan"
+    fi
 
     show_progress $cnt
 
@@ -877,6 +887,7 @@ prog_copy() {
     local dirty_ratio dirty_bytes
     read dirty_ratio < /proc/sys/vm/dirty_ratio
     read dirty_bytes < /proc/sys/vm/dirty_bytes
+    echo $USB_DIRTY_BYTES > /proc/sys/vm/dirty_bytes
 
     mkdir -p "$dest"
     rm -f $err_file

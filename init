@@ -26,8 +26,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.20.20"
-           VERSION_DATE="Wed 12 Jun 2019 11:19:27 PM MDT"
+                VERSION="8.21.01"
+           VERSION_DATE="Mon 17 Jun 2019 06:06:34 PM MDT"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -352,7 +352,7 @@ main_wrapper() {
 
     #tsplash_progress init
 
-    tsplash_copy $NEW_ROOT
+    tsplash_copy_config $NEW_ROOT
 
     write_log_files $MY_LOG $NEW_ROOT/$LOG_FILE
     MY_LOG=$NEW_ROOT/$LOG_FILE.color
@@ -471,7 +471,10 @@ main_core() {
 
     if [ "$FRUGAL_ID" ]; then
         find_frugal_file "$FRUGAL_ID" || frugal_error $?
-        tsplash_on
+
+        # This is not perfect but we don't want to flash back and forth quickly
+        # if we do a frugal install with persistence
+        [ -z "$PERSIST" ] || tsplash_on
     else
         find_linuxfs_file
     fi
@@ -737,8 +740,8 @@ read_late_cmdline_params() {
                  frugal_persist) set_frugal 'root!,home!'             ;;
                     frugal_root) set_frugal 'root!'                   ;;
                   frugal_static) set_frugal 'root!,home!,static'      ;;
-             frugal_static_root) set_frugal 'root!,home!,static'      ;;
-                  f_static_root) set_frugal 'root!,home!,static'      ;;
+             frugal_static_root) set_frugal 'root!,static'            ;;
+                  f_static_root) set_frugal 'root!,static'            ;;
                     frugal_home) set_frugal 'home!'                   ;;
                     frugal_only) set_frugal                           ;;
 
@@ -2102,7 +2105,7 @@ find_frugal_file() {
 
     if [ $ret -eq 0  -a -z "$FORCE_FRUGAL" ]; then
         #. Found existing <frugal> install
-        msg  "$_Found_existing_X_install_" frugal
+        tsplash_alert  "$_Found_existing_X_install_" frugal
         SQFILE_MP=$BOOT_MP
         SQFILE_DEV=$FOUND_DEV
 
@@ -2111,7 +2114,6 @@ find_frugal_file() {
         DEFAULT_PERSIST_PATH=$SQFILE_PATH
         SQFILE_DIR=$(dirname $SQFILE_FULL)
         DEFAULT_DIR=$SQFILE_DIR
-
         return 0
 
     elif [ $ret -eq 40 ]; then
@@ -2164,9 +2166,11 @@ find_frugal_file() {
     if  [ -z "$device" ]; then
 
         tsplash_clear
-        msg  "$_Looking_for_partitions_with_at_least_X_free_Please_wait_" "$(nq $(size_label_m $needed))"
-        select_device 'frugal' device $needed not_mounted || return 2
+        tsplash_alert  "$_Looking_for_partitions_with_at_least_X_free_Please_wait_" "$(nq $(size_label_m $needed))"
+        select_device 'frugal' device $needed not_mounted
         local ret=$?
+        tsplash_alert ""
+        [ $ret -eq 0 ] || return 2
         [ -z "$device" -o "$device" =  "$_quit_" ] && return 1
 
         [ "$LABEL_FRUGAL" ] && label_device $device "$FRUGAL_NAME-Frugal"
@@ -2213,9 +2217,8 @@ find_frugal_file() {
 
         msg  "$_copy_X_to_Y_" $(pq $(size_label_m $actual)) $(pq $sqfile_dir/)
 
-        #if ! time_cmd copy_files_md5 $old_dir $sqfile_dir $FRUGAL_FILES; then
-        if ! prog_copy_md5 $sqfile_dir $old_dir $FRUGAL_FILES; then
-            warn  "Copy failed.  Erasing partial copy"
+        if ! tsplash_prog_copy_md5 $sqfile_dir $old_dir $FRUGAL_FILES; then
+            tsplash_warn  "Copy failed.  Erasing partial copy"
             log_cmd rm -f $sqfile_full
             return 40
         fi
@@ -4311,6 +4314,15 @@ prog_copy_md5() {
 }
 
 #------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
+tsplash_prog_copy_md5() {
+    local dest=$1  src=$2 ; shift 2
+    tsplash_prog_copy $dest $(find_md5_files $src "$@")
+}
+
+
+#------------------------------------------------------------------------------
 # prog_copy <dest> <src1> <src2> ...
 # Copy source files to destination directory and display a bar indicating the
 # progress.
@@ -4331,6 +4343,7 @@ prog_copy() {
     local dirty_ratio dirty_bytes
     read dirty_ratio < /proc/sys/vm/dirty_ratio
     read dirty_bytes < /proc/sys/vm/dirty_bytes
+    echo $USB_DIRTY_BYTES > /proc/sys/vm/dirty_bytes
 
     mkdir -p "$dest"
     rm -f $err_file
@@ -6514,7 +6527,13 @@ tsplash_start() {
     openvt -s -c $TSPLASH_TTY tsplash start "$DO_TSPLASH"
 }
 
-tsplash_enabled()  { [ -n "$DO_TSPLASH" ]; return $?        ; }
+#------------------------------------------------------------------------------
+# Convenience routine
+#------------------------------------------------------------------------------
+tsplash_enabled()  {
+    [ -n "$DO_TSPLASH" ]
+    return $?
+}
 
 #------------------------------------------------------------------------------
 # Switch to the boot screen
@@ -6522,6 +6541,24 @@ tsplash_enabled()  { [ -n "$DO_TSPLASH" ]; return $?        ; }
 tsplash_off() {
     tsplash_enabled || return
     echo 'tsplash off' >> $MY_LOG
+    TSPLASH_OFF=true
+    chvt $MY_TTY
+}
+
+#------------------------------------------------------------------------------
+# Clear screen, wait briefly and then chvt back here.
+# Will only clear the screen once until we move back to the tsplash screen.
+#------------------------------------------------------------------------------
+tsplash_clear() {
+    tsplash_enabled || return
+    if [ -z "$TSPLASH_CLEARED" -a -z "$NO_CLEAR" ]; then
+        clear
+        echo 'tsplash clear' >> $MY_LOG
+        sleep .2
+        TSPLASH_CLEARED=true
+    fi
+
+    TSPLASH_OFF=true
     chvt $MY_TTY
 }
 
@@ -6529,7 +6566,9 @@ tsplash_off() {
 # Go back to the tsplash screen and reset the TSPLASH_CLEARED flag
 #------------------------------------------------------------------------------
 tsplash_on() {
-    tsplash_enabled || return
+    tsplash_enabled    || return
+    [ "$TSPLASH_OFF" ] || return
+    unset TSPLASH_OFF
     echo 'tsplash on' >> $MY_LOG
     chvt $TSPLASH_TTY
     unset TSPLASH_CLEARED
@@ -6571,21 +6610,8 @@ tsplash_warn() {
 }
 
 #------------------------------------------------------------------------------
-# Clear screen, wait briefly and then chvt back here.
-# Will only clear the screen once until we move back to the tsplash screen.
-#------------------------------------------------------------------------------
-tsplash_clear() {
-    tsplash_enabled || return
-    if [ -z "$TSPLASH_CLEARED" -a -z "$NO_CLEAR" ]; then
-        clear
-        sleep .2
-        TSPLASH_CLEARED=true
-    fi
-    chvt $MY_TTY
-}
-
-#------------------------------------------------------------------------------
-# Wait for tsplash to finish before moving on
+# Wait for the tsplash program to finish before moving on
+# We use this for progress bars
 #------------------------------------------------------------------------------
 tsplash_wait() {
     openvt -w -c $TSPLASH_TTY /live/bin/tsplash "$@"
@@ -6595,7 +6621,7 @@ tsplash_wait() {
 # Copy the tsplash config to the "real" file system.  We need to do this as
 # last as possible, I think.  Perhaps we can improve this.
 #------------------------------------------------------------------------------
-tsplash_copy() {
+tsplash_copy_config() {
     tsplash_enabled || return
     local new_dir=$1
 
@@ -6637,7 +6663,7 @@ prepare_switch_root() {
 
     local f
     for f in README LICENSE; do
-        local from=/live/$f  to=$new_root/etc/live/$f
+        local from=/live/$f  to=$new_root/live/$f
         test -e $from || continue
         test -e $to   && continue
         cp $from $to

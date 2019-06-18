@@ -9,9 +9,7 @@
    9)  hwclock=utc     Hardware-Uhr läuft auf UTC ('Greenwich Zeitzone') (für Linux-Systeme ohne Windows Benutzung)
   10)  hwclock=local   Hardware-Uhr nutzt lokale Zeit (besser mit Windows-Systemem)
   11)  password        Ändere Passwörter ("demo") vor dem Bootvorgang
-  12)  wicd            Wicd-Dienst beim Start aktivieren
-  13)  nowicd          Wicd-Dienst beim Start deaktivieren
-  14)  nostore         Abschalten des Live-USB-Speicher Features (nur im Live-USB möglich, nicht von DVD)
-  15)  dostore         Einschalten des LiveUSB-Speicher features (nur im LiveUSB möglich)
-  16)  savestate       Speicherung von Dateien zwischen den Sitzungen ermöglichen (nur bei LiveUSB)
-  17)  nosavestate     Keine Speicherung von Dateien zwischen den Sitzungen (nur bei LiveUSB)
+  12)  nostore         Abschalten des Live-USB-Speicher Features (nur im Live-USB möglich, nicht von DVD)
+  13)  dostore         Einschalten des LiveUSB-Speicher features (nur im LiveUSB möglich)
+  14)  savestate       Speicherung von Dateien zwischen den Sitzungen ermöglichen (nur bei LiveUSB)
+  15)  nosavestate     Keine Speicherung von Dateien zwischen den Sitzungen (nur bei LiveUSB)
