@@ -26,8 +26,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.21.01"
-           VERSION_DATE="Mon 17 Jun 2019 06:06:34 PM MDT"
+                VERSION="8.22.00"
+           VERSION_DATE="Fri 21 Jun 2019 01:07:09 PM MDT"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -37,8 +37,7 @@
           PERSIST_RETRY=10
     FAILSAFE_BOOT_RETRY=30
 
-    #DISABLE_SERVICES_OPTS="(c[0-9]+(\.[0-9]*)?|c\.[0-9]+|[ADLMPSWXacdgklmnNrsvwx])+"
-    DISABLE_SERVICES_OPTS="[aABcdgkilLmnNPrsSvVwWx]+"
+    DISABLE_SERVICES_OPTS="[aABcdgkilLmnNPrsSvVwWxY]+"
 
            RW_MODE="ro"
             PRINTK=0
@@ -124,6 +123,8 @@ KMS_VIDEO_MODULES="amdgpu,analogix-anx78xx,ast,bochs-drm,ch7006,cirrus,gma500_gf
 
    MAX_ROOTFS_SIZE="40960"  # 40 GiB
    MIN_ROOTFS_SIZE="100"
+
+        SWAP_SIZES="200 250 300 400 500 750 1024 1536 2048 2560 3072 4096 5120 6144 8192 10240"
 
       LIVE_SCRIPTS="live-L10n live-init"
       LAST_BP_TIME=0
@@ -359,7 +360,6 @@ main_wrapper() {
     [ "$NO_SAVE_LOGS" ] || copy_live_logs "$NEW_ROOT" "$LOG_DIR"
 
     breakpoint b9    "Bash shell right before starting init"
-    breakpoint bash  "Bash shell right before starting init"
 
     #free -m >> $MY_LOG
     echo 3 > /proc/sys/vm/drop_caches
@@ -373,7 +373,7 @@ main_wrapper() {
 
         CHROOT_BIN=$FINAL_DIR/bin
         $SET_ARCH chroot $NEW_ROOT $CHROOT_BIN/setsid $CHROOT_BIN/cttyhack $INIT_PROG
-        breakpoint i "after init= chroot"
+        #breakpoint i "after init= chroot"
 
         MY_LOG=/dev/null
         safe_shutdown poweroff ask
@@ -534,14 +534,20 @@ main_core() {
     prepare_persistence
 
     mount_persist_device "$PERSIST_FILES" "$FROM_PERSIST"
-    tsplash_on
-
-    list_modules
 
     # Check for ehci warning
     dmesg | grep 'Warning.*ehci' >&2
 
+
+    if [ -n "$MADE_PERSIST_FILE" -a ! -e $SWAP_FILE ]; then
+        # FIXME check free space
+        YES_no  "$_Create_a_live_usb_swap_file_" && : ${SWAP_FILE_SIZE:=choose}
+    fi
+
     make_swap_file "$SWAP_FILE"  "$SWAP_FILE_SIZE"
+
+    tsplash_on
+    list_modules
 
     breakpoint 5 "after mounting persistence device"
 
@@ -625,7 +631,7 @@ main_core() {
 
     stop_hotplug
 
-    breakpoint 7 "before prepare switch_root"
+    #breakpoint 7 "before prepare switch_root"
 
     prepare_switch_root $NEW_ROOT $LIVE_DIR $FINAL_DIR
 
@@ -748,6 +754,7 @@ read_late_cmdline_params() {
                         nostore) NO_STORE=true                        ;;
                         dostore) DO_STORE=true                        ;;
 
+                   mk_swap_file) SWAP_FILE_SIZE=choose                ;;
                  mk_swap_file=*) SWAP_FILE_SIZE=$value                ;;
         esac
     done
@@ -926,6 +933,7 @@ read_cmdline_params()
                       toram_all)  ;;
 
 
+                   mk_swap_file)  ;;
                  mk_swap_file=*)  ;;
 
         # Convenience short cuts from our menus
@@ -2000,7 +2008,7 @@ find_device() {
     DEVICE_LIST=
 
     #. Look for <type> devices with <attribute X>
-    [ "$try" = 0 ] && msg  "$_Look_for_X_device_with_Y_" "$(fq $find_type)" "$type $(cq $value)"
+    [ "$try" = 0 ] && tsplash_alert  "$_Look_for_X_device_with_Y_" "$(fq $find_type)" "$type $(cq $value)"
 
     case $type in
         name) DEVICE_LIST=$(cleanse_dev  $value)  ; err_ret=1 ;;
@@ -2097,9 +2105,9 @@ find_frugal_file() {
     local frugal_id=$1  bdir=$FRUGAL_DIR
     : ${bdir:=$FRUGAL_NAME-Frugal-$(uname -r)}
 
+    tsplash_alert  "$_Search_for_X_partition_" frugal
     local sqfile=$bdir/$SQFILE_NAME need_to_ask
     local device name=${frugal_id%%=*}  value=${frugal_id#*=}
-
     find_files frugal "$sqfile" "$BOOT_MP" "$frugal_id" "$FRUGAL_RETRY"
     local ret=$?
 
@@ -2161,15 +2169,13 @@ find_frugal_file() {
     local actual=$(file_usage_m $old_dir $FRUGAL_FILES)
 
     # Safety first!
-    local needed=${FRUGAL_NEEDED:=$((actual + 10))}
+    local needed=${FRUGAL_NEEDED:=$((actual + 100))}
 
     if  [ -z "$device" ]; then
 
-        tsplash_clear
         tsplash_alert  "$_Looking_for_partitions_with_at_least_X_free_Please_wait_" "$(nq $(size_label_m $needed))"
         select_device 'frugal' device $needed not_mounted
         local ret=$?
-        tsplash_alert ""
         [ $ret -eq 0 ] || return 2
         [ -z "$device" -o "$device" =  "$_quit_" ] && return 1
 
@@ -2191,7 +2197,7 @@ find_frugal_file() {
 
     [ "$FORCE_FRUGAL" ] && rm -rf $sqfile_dir
 
-    breakpoint f "in frugal install"
+    #breakpoint f "in frugal install"
 
     if [ -e $sqfile_full ]; then
         msg  "$_Found_existing_X_install_" frugal
@@ -2217,7 +2223,7 @@ find_frugal_file() {
 
         msg  "$_copy_X_to_Y_" $(pq $(size_label_m $actual)) $(pq $sqfile_dir/)
 
-        if ! tsplash_prog_copy_md5 $sqfile_dir $old_dir $FRUGAL_FILES; then
+        if ! tsplash_prog_copy_md5 frugal_install $sqfile_dir $old_dir $FRUGAL_FILES; then
             tsplash_warn  "Copy failed.  Erasing partial copy"
             log_cmd rm -f $sqfile_full
             return 40
@@ -3026,7 +3032,7 @@ do_fsck() {
 
     msg  "$_check_X_filesystem_" "$(pq $name)"
 
-    breakpoint F "Before fsck"
+    #breakpoint F "Before fsck"
 
     vmsg 2 "fsck$white $dev"
     ld_path /sbin/e2fsck $opts $dev &> $fifo
@@ -3036,7 +3042,7 @@ do_fsck() {
 
     ld_path /sbin/tune2fs -C 1 $dev
 
-    breakpoint F "After fsck"
+    #breakpoint F "After fsck"
 
     case $ret in
 	    0) vmsg 1     "$_There_were_no_errors_on_X_"            "$sdev" ; err=0 ;;
@@ -3123,7 +3129,9 @@ custom_code() {
 breakpoint() {
     local bp=$1  desc=$2
 
-    custom_code "$bp" "$desc"
+    case $bp in
+        [08])  custom_code "$bp" "$desc" ;;
+    esac
 
     if [ "$DB_PLUS" -a -n "${bp##b*}" ]; then
         local now=$(get_time)
@@ -3157,7 +3165,7 @@ breakpoint() {
 
     trap "" $SIGNAL_LIST
 
-    tsplash_on
+    [ "$bp" != 'e' ] && tsplash_on
 
     bp_time_2=$(get_time)
 
@@ -3524,7 +3532,7 @@ safe_shutdown() {
     set_path $LIVE_BIN
 
     final_umount && vmsg 1  "$_Unmount_successful_"
-    breakpoint u "final umount"
+    #breakpoint u "final umount"
     if [ "$ask" ]; then
         vmsgN 1  "$_Press_X_to_Y_" "<$(bq  "$_Enter_")>" "$(hq $cmd)"
         read x
@@ -3543,7 +3551,7 @@ non_fatal()  { _non_fatal "$(printf "$@")"                   ;}
 # Show last 10 lines of dmesg before the error message
 #------------------------------------------------------------------------------
 fatal_dmesg() {
-    tsplash_clear
+    tsplash_only_clear
     local lines=10
     printf 'Last %s lines of the dmesg output:\n' "$lines"
     printf "%s\n" "$rbar"
@@ -3962,6 +3970,8 @@ select_device() {
     local title_type=$1  var=$2  min_size=${3:-0} not_mounted=$4
     local title=$(printf  "$_Please_select_X_device_" "$title_type")
 
+    tsplash_only_clear
+
     local cnt=1 cnt_lab rtype mp=/tmp/mnt
     local size_lab free free_lab
     local line pretty skip data display
@@ -4088,6 +4098,9 @@ Blkid
         display="${display}$(printf  "$_The_limiting_factors_are_highlighted_in_X_" "$rev_video")\n"
         display="${display}$(printf "A hightlighted name means the device is already mounted")\n"
     fi
+
+    tsplash_off
+    tsplash_alert ""
 
     my_select_2 "$title" $var "0" "$data" "$display"
     echo -e "$display" >> $MY_LOG
@@ -4317,8 +4330,8 @@ prog_copy_md5() {
 #
 #------------------------------------------------------------------------------
 tsplash_prog_copy_md5() {
-    local dest=$1  src=$2 ; shift 2
-    tsplash_prog_copy $dest $(find_md5_files $src "$@")
+    local label=$1 dest=$2  src=$3 ; shift 3
+    tsplash_prog_copy "$label" $dest $(find_md5_files $src "$@")
 }
 
 
@@ -4395,8 +4408,9 @@ prog_copy() {
 # Use tsplash to do the copy if it is enabled.
 #------------------------------------------------------------------------------
 tsplash_prog_copy() {
+    local label=$1 ; shift
     if tsplash_enabled; then
-        tsplash_wait copy_toram "$@"
+        tsplash_wait "$label" "$@"
     else
         prog_copy "$@"
     fi
@@ -4475,19 +4489,30 @@ prog_dd() {
 # if needed since it is aleady in a chroot.
 #------------------------------------------------------------------------------
 make_swap_file() {
-    local file=$1  size=$(echo $2 | tr 'mg' 'MG')  raw_size=$2
-    [ -z "$size" ]  && return
+    local file=$1  swap_size=$(echo $2 | tr 'mg' 'MG')  raw_size=$2
+    [ -z "$swap_size" ]  && return
+
     if test -e "$file"; then
         warn  "$_Swap_file_X_already_exists_" "$(pqw $file)"
+        return
     fi
 
     local dir=$(dirname "$file")
     local free_space=$(free_space "$dir")
+
+    case $swap_size in
+        choose)  select_swap_file_size 'swap_size' $free_space $dir ;;
+    esac
+
+    [ "$swap_size" =  "$_quit_" ] && return 1
+
+    vmsg 1  "$_Swap_file_size_X_" "$(nq_label_meg $swap_size)"
+
     local megs  factor=
-    case $size in
-        [0-9]*[0-9]) megs=${size%M} ; factor=1    ;;
-                 *M) megs=${size%M} ; factor=1    ;;
-                 *G) megs=${size%G} ; factor=1024 ;;
+    case $swap_size in
+        [0-9]*[0-9]) megs=${swap_size%M} ; factor=1    ;;
+                 *M) megs=${swap_size%M} ; factor=1    ;;
+                 *G) megs=${swap_size%G} ; factor=1024 ;;
     esac
 
     # msg "Freespace: $free_space"
@@ -4512,6 +4537,40 @@ make_swap_file() {
     else
         prog_dd "$file" "$megs"
     fi
+}
+
+#------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
+select_swap_file_size() {
+    local var=$1  free=$2  dir=$3  size  sizes
+    local title=$(printf  "$_Please_select_size_of_X_file_" $(pqw 'swap'))
+
+    local avail=$((free - MKFS_FREE_MARGIN))
+
+    local part_fstype=$(mntpnt_fstype $dir)  is_vfat
+    case $part_fstype in
+        vfat) is_vfat=true ;;
+    esac
+
+    # Set the maximum size for this menu
+    local max_size=$avail  min_size=0
+    [ -n "$is_vfat" -a "$max_size" -gt 4095 ] && max_size=4095
+    if [ "$base_file" = rootfs ]; then
+        [ "$max_size" -gt "$MAX_ROOTFS_SIZE" ] && max_size=$MAX_ROOTFS_SIZE
+        min_size=$MIN_ROOTFS_SIZE
+    fi
+
+    # Create a menu of sizes, stop when the sizes are too big
+    local size sizes
+    for size in $SWAP_SIZES; do
+        [ $size -gt $max_size ] && break
+        [ $size -lt $min_size ] && continue
+        sizes="$sizes $size"
+    done
+
+    tsplash_clear
+    size_menu $var "$title" "" $sizes
 }
 
 #------------------------------------------------------------------------------
@@ -4699,7 +4758,7 @@ check_vid() {
     local sqfs_vid=$1  base=$2  fname=$3
 
     local vid_file=$base$VID_DIR/$fname
-    breakpoint v "before check VID"
+    #breakpoint v "before check VID"
 
     local rootfs_vid
     [ "$vid_file" ] && rootfs_vid=$(get_vid $vid_file)
@@ -4980,7 +5039,7 @@ copy_to_ram() {
         [ -d $toram_mp ]        && rmdir $toram_mp
         non_fatal  "$_Copy_to_RAM_failed_"
     fi
-    breakpoint t "After copy to ram"
+    #breakpoint t "After copy to ram"
 }
 
 _copy_to_ram() {
@@ -5068,7 +5127,7 @@ _copy_to_ram() {
 
     #if ! cp_file $orig $name $dest 2>&1; then
 
-    if ! tsplash_prog_copy $dest $from_list; then
+    if ! tsplash_prog_copy copy_toram $dest $from_list; then
         err  "Copy failed.  Cannot do %s" $err_toram
         return 3
     fi
@@ -5412,7 +5471,7 @@ _persist_makefs() {
 
     mount -o remount,rw $SQFILE_DEV 2>/dev/null
 
-    breakpoint m "before makefs"
+    #breakpoint m "before makefs"
 
     [ "$is_vfat" ] &&  warn  "$_Warning_this_can_take_several_minutes_per_Gigabyte_on_a_X_file_system_" $(pqw $part_fstype)
     if ! time_cmd makefs $full_file $fs_type $fs_size $part_fstype; then
@@ -5422,6 +5481,8 @@ _persist_makefs() {
     fi
 
     do_fsck "new $file file" $full_file -p filefs || return 1
+
+    MADE_PERSIST_FILE=true
 
     eval $needed_var=\$needed
     eval $wanted_var=\$wanted
@@ -5818,12 +5879,12 @@ copy_homefs() {
 
     msg  "$_Copy_home_filesystem_Please_be_patient_"
 
-    breakpoint r "Before resize homefs rsync"
+    #breakpoint r "Before resize homefs rsync"
 
     time_cmd ld_path rsync -aq --delete $cur_home_mp/ $new_home_mp/
     local ret=$?
 
-    breakpoint r "After resize homefs rsync"
+    #breakpoint r "After resize homefs rsync"
 
     if [ "$ret" -ne 0 ]; then
         err  "The %s program failed.  Will not resize %s" $(pqe rsync) $(pqe homefs)
@@ -6563,6 +6624,18 @@ tsplash_clear() {
 }
 
 #------------------------------------------------------------------------------
+#
+#------------------------------------------------------------------------------
+tsplash_only_clear() {
+    tsplash_enabled || return
+    if [ -z "$TSPLASH_CLEARED" -a -z "$NO_CLEAR" ]; then
+        clear
+        echo 'tsplash clear' >> $MY_LOG
+        sleep .1
+        TSPLASH_CLEARED=true
+    fi
+}
+#------------------------------------------------------------------------------
 # Go back to the tsplash screen and reset the TSPLASH_CLEARED flag
 #------------------------------------------------------------------------------
 tsplash_on() {
@@ -6614,6 +6687,8 @@ tsplash_warn() {
 # We use this for progress bars
 #------------------------------------------------------------------------------
 tsplash_wait() {
+    # Yes I could do this iwth -s but that sometimes causes problems
+    chvt $TSPLASH_TTY
     openvt -w -c $TSPLASH_TTY /live/bin/tsplash "$@"
 }
 

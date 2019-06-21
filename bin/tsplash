@@ -33,7 +33,7 @@ SHOW_BORDER=true
 SHOW_NAV=true
 
 MAX_PROGRESS=7
-PROG_CHARS=5
+PROG_CHARS=4
 
 LOCALE_DIR=/live/locale
 CONF_DIR=/live/config
@@ -102,14 +102,16 @@ eval_cmd() {
                redraw) do_redraw           ;;
          redraw-clear) do_redraw_clear     ;;
                 clear) clear               ;;
-             progress) do_progress "$@"    ;;
-                alert) do_alert    "$@"    ;;
-                 warn) do_warn     "$@"    ;;
+             progress) do_progress  "$@"   ;;
+                alert) _do_alert  0 "$@"   ;;
+               alert2) _do_alert  1 "$@"   ;;
+                 warn) do_warn      "$@"   ;;
 
       redraw-progress) do_redraw
                        do_progress "$@"    ;;
 
-       clear-progress) clear_progress "$@" ;;
+       clear-progress) clear_progress "$@"
+                       clear_prog_bar      ;;
        clear-prog-bar) clear_prog_bar      ;;
 
             udev-rule) do_redraw           ;;
@@ -124,8 +126,9 @@ eval_cmd() {
              shutdown) clear_progress $cmd ;;
                reboot) clear_progress $cmd ;;
 
-         mk_swap_file) mk_swap_file $cmd "$@"   ;;
-           copy_toram) copy_toram   $cmd "$@"   ;;
+         mk_swap_file) mk_swap_file   $cmd "$@"   ;;
+       frugal_install) frugal_install $cmd "$@"   ;;
+           copy_toram) copy_toram     $cmd "$@"   ;;
 
                 *) fatal 'Unknown command %s' "$cmd" ;;
     esac
@@ -192,6 +195,7 @@ do_start() {
         [ -z "${param##*[NA]*}" ] && SHOW_NAV=
         [ -z "${param##*[ka]*}" ] && SHOW_KERNEL=true
         [ -z "${param##*[KA]*}" ] && SHOW_KERNEL=
+        [ -z "${param##*[I]*}"  ] && ASCII_ONLY=true
         [ -z "${param##*[w]*}"  ] && NAV_7=true
 
         [ -z "${param##*[W]*}"  ] && NAV_7=
@@ -231,11 +235,13 @@ do_progress() {
 #------------------------------------------------------------------------------
 # Put an "alert" message in the progress bar area (after clearing)
 #------------------------------------------------------------------------------
-do_alert() {
+_do_alert() {
+    local yoff=$1 ; shift
     set_color
     screen_init
-    clear_line $PROG_BAR_Y
-    ctext $PROG_BAR_Y "" "$*"
+    local y=$(($PROG_BAR_Y - 3 + $yoff * 2))
+    clear_line $y
+    ctext $y "$*"
 }
 
 #------------------------------------------------------------------------------
@@ -245,7 +251,7 @@ do_warn() {
     set_color
     screen_init
     clear_line $PROG_BAR_Y
-    ctext $PROG_BAR_Y "" "$*" $bold_co
+    ctext $PROG_BAR_Y "$*" $bold_co
 }
 
 #------------------------------------------------------------------------------
@@ -259,7 +265,7 @@ clear_progress() {
     clear_line $PROG_Y
     clear_line $PROG_Y2
     [ -z "$cmd" ] && return
-    ctext $PROG_Y2 "" "$cmd" $bold_co
+    ctext $PROG_Y2 "$cmd" $bold_co
 }
 
 #------------------------------------------------------------------------------
@@ -285,11 +291,17 @@ do_redraw() {
 
     [ -n "$SHOW_BORDER" ] && box $SCREEN_BOX $lt_cyan
 
+    local arch
+    case $(uname -m) in
+          i686) arch=" 32-bit" ;;
+        x86_64) arch=" 64-bit" ;;
+    esac
+
     if [ "$SHOW_KERNEL" ]; then
-        ctext "$((WELCOME_Y -2))" "" "$WELCOME_MSG" "$lt_cyan"
-        ctext "$WELCOME_Y"        "" "$(uname -r)"  "$nc_co"
+        ctext "$((WELCOME_Y -2))" "$WELCOME_MSG" "$lt_cyan"
+        ctext "$WELCOME_Y"        "$(uname -r) $arch"  "$nc_co"
     else
-        ctext "$WELCOME_Y" "" "$WELCOME_MSG" "$lt_cyan"
+        ctext "$WELCOME_Y" "$WELCOME_MSG" "$lt_cyan"
     fi
 
     show_progress $cnt
@@ -310,10 +322,17 @@ show_progress() {
     local y=$PROG_Y
     local x=$PROG_X
 
+    local off_color=$dk_grey
+
+    if [ "$ASCII_ONLY" ]; then
+        C_DOT="o"
+        off_color=$nc_co
+    fi
+
     printf "$bold_co\e[$y;${x}H"
     for cnt in $(seq 1 $MAX_PROGRESS); do
-        [ $cnt -gt ${p_cnt:-0} ] && printf "$dk_grey"
-        printf "%-${PROG_CHARS}s" "$C_DOT"
+        [ $cnt -gt ${p_cnt:-0} ] && printf "$off_color"
+        printf "%-${PROG_CHARS}s$C_DOT" ""
     done
     printf "$nc_co"
 
@@ -337,7 +356,7 @@ last_progress() {
 verbose_progress() {
     local msg=$1  color=${2:-$lt_grey}  y2=$PROG_Y2
     clear_line $y2
-    ctext $y2 "" "$msg" $color
+    ctext $y2 "$msg" $color
 }
 
 #------------------------------------------------------------------------------
@@ -350,7 +369,8 @@ get_welcome_msg() {
     : ${DISTRO_BUG_REPORT_URL:=$BUG_REPORT_URL}
     : ${DISTRO_NAME:=antiX}
     : ${DISTRO_PRETTY_NAME:=antiX-17 (generic)}
-    do_welcome "$DISTRO_PRETTY_NAME"
+    # do_welcome "$DISTRO_PRETTY_NAME"
+    echo "$DISTRO_PRETTY_NAME"
 }
 
 #------------------------------------------------------------------------------
@@ -571,6 +591,8 @@ pqw()     { echo "$hi_co$*$m_co"  ;}
 
 screen_init() {
 
+    test -e /dev/fb0 || ASCII_ONLY=true
+
     : ${SCREEN_BORDER:=1}
 
     RAW_X0=1 ; RAW_Y0=1
@@ -598,28 +620,16 @@ screen_init() {
     PROG_Y=$((WELCOME_Y +  2))
     PROG_Y2=$((PROG_Y + 2))
     PROG_BAR_Y=$(( SCREEN_HEIGHT * 3 / 4 - 1))
-    #PROG_BAR_Y=$((PROG_Y + 4))
 
-    PROG_X=$(((RAW_SCREEN_WIDTH - MAX_PROGRESS * PROG_CHARS / 2) / 2))
+    PROG_X=$(((RAW_SCREEN_WIDTH - MAX_PROGRESS * (PROG_CHARS + 1) - 2) / 2))
 
 }
 
 #------------------------------------------------------------------------------
-# Print the main "welcome" message which ATM is the distro pretty name along
-# with the 32/64 bit architecture
+# Print the main "welcome" message which ATM is the distro pretty name
 #------------------------------------------------------------------------------
 do_welcome() {
-    local pretty_name=$1 version=$2  v_date=$3  arch
-    case $(uname -m) in
-          i686) arch=" 32-bit" ;;
-        x86_64) arch=" 64-bit" ;;
-    esac
-
-    case $(uname -r) in
-        *[pP][aA][eE]) arch="$arch pae" ;;
-    esac
-
-    pretty_name="$pretty_name$arch"
+    local pretty_name=$1
     echo "$pretty_name"
 
 }
@@ -702,7 +712,9 @@ text_right() {
 }
 
 ctext() {
-    local y=$1 x0=${2:-$((RAW_SCREEN_WIDTH / 2))} msg=$3 color=$4
+    local y=$1  msg=$2  color=$3
+    local x0=$((RAW_SCREEN_WIDTH / 2))
+
     local len=$(str_len "$msg")
     local x=$((1 + x0 - len/2))
     printf "$color\e[$y;${x}H$msg"
@@ -768,6 +780,29 @@ cruler() {
 #==============================================================================
 # Progress bar routines
 #==============================================================================
+#------------------------------------------------------------------------------
+# frugal_install
+#------------------------------------------------------------------------------
+frugal_install() {
+    local cmd=$1 ; shift
+    set_color
+    screen_init
+    verbose_progress "$cmd" $bold_co
+
+    local size=$(du_size "$@")
+    # Copy <size> to RAM
+    bar_box  "$_Copying_X_" "$(label_meg $size)"
+
+    prog_copy "$@"
+    local ret=$?
+
+    sleep $PROG_BAR_PAUSE
+    _clear_prog_bar
+    last_progress
+    log_it '%s done'" $cmd"
+    my_exit $ret
+}
+
 #------------------------------------------------------------------------------
 # copy_toram() $dest (src1 src2 ...)
 #------------------------------------------------------------------------------
@@ -941,7 +976,7 @@ bar_box() {
     local height=3
 
     box $x1 $y1 $width $height $white
-    [ -n "$title" ] && ctext $((y1 - 1 )) "" " $title " $white
+    [ -n "$title" ] && ctext $((y1 - 1 )) " $title " $white
 }
 
 #------------------------------------------------------------------------------
@@ -988,7 +1023,7 @@ clear_prog_bar() {
 # been run
 #------------------------------------------------------------------------------
 _clear_prog_bar() {
-    local y  y0=$((PROG_BAR_Y - 3))
+    local y  y0=$((PROG_BAR_Y - 4))
     for y in $(seq 1 4); do
         clear_line $((y + y0))
     done
