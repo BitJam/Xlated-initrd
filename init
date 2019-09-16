@@ -26,8 +26,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.22.00"
-           VERSION_DATE="Fri 21 Jun 2019 01:07:09 PM MDT"
+                VERSION="8.22.03"
+           VERSION_DATE="Mon 16 Sep 2019 12:29:59 PM MDT"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -604,7 +604,7 @@ main_core() {
     [ "$DO_AUTO_LOGIN" ] && auto_login   "$AUTO_LOGIN_PROG" "$AUTO_LOGIN_TERMS" "$NEW_ROOT"
     [ "$DO_FANCY"      ] && fancy_prompt "$FANCY_PROMPT" "$NEW_ROOT"
     [ "$DB_PLUS"       ] && page_updown_keys "$NEW_ROOT"
-    tsplash_enabled && [ -z "$CMD_MY_TTY$TTY1_ON" ] && disable_tty1 "$NEW_ROOT"
+    [ "$TTY1_OFF"      ] && disable_tty1 "$NEW_ROOT"
 
     # FIXME: do this after copy_xtra for easy testing (for now) (????)
     PROC_CMDLINE=$(cat /live/config/proc-cmdline)
@@ -793,7 +793,7 @@ read_cmdline_params()
                       splasht=*) DO_TSPLASH=$value                               ;;
                        st_tty=*) TSPLASH_TTY=$value                              ;;
                       console=*) CMD_MY_TTY=${value#tty}                         ;;
-                         tty1on) TTY1_ON=true                                    ;;
+                        tty1off) TTY1_OFF=true                                    ;;
                       CONSOLE=*) CMD_MY_TTY=${value#tty}                         ;;
                        poweroff) poweroff -f -n                                  ;;
                          reboot) reboot -f -n                                    ;;
@@ -952,6 +952,10 @@ read_cmdline_params()
                     frugal_only)  ;;
                         nostore)  ;;
                         dostore)  ;;
+
+        # Used in the live-init script to remove modules
+                         nonuke)  ;;
+                         nuke=*)  ;;
 
         #----- Some known codes -------------------------
 
@@ -2866,7 +2870,7 @@ link_top_dirs() {
 #------------------------------------------------------------------------------
 try_mount() {
     local dev=$1  mp=$2  rw=${3:-$RW_MODE}
-    local type=$(blkid $dev | sed -n -r 's/.* TYPE="([^"]*)"$/\1/p' | tail -n 1)
+    local type=${4:-$(blkid $dev | sed -n -r 's/.* TYPE="([^"]*)"$/\1/p' | tail -n 1)}
     [ "$type" ] || return 1
     local opts=$rw,noatime
     local winopts=umask=000,dmask=002,fmask=113
@@ -3129,9 +3133,7 @@ custom_code() {
 breakpoint() {
     local bp=$1  desc=$2
 
-    case $bp in
-        [08])  custom_code "$bp" "$desc" ;;
-    esac
+    custom_code "$bp" "$desc"
 
     if [ "$DB_PLUS" -a -n "${bp##b*}" ]; then
         local now=$(get_time)
@@ -4040,8 +4042,7 @@ select_device() {
                 skip=true
             fi
 
-        # The busybox mount error messages are worthless at best
-        elif mount -t $type $dev $mp &>/dev/null; then
+        elif try_mount $dev $mp "" $type; then
             free=$(free_space $mp)
             free_lab=$(size_label_m $free)
             umount $mp
@@ -4114,10 +4115,10 @@ Blkid
 sorted_blkid() {
     blkid | sed -r \
             -e 's=^/dev/==' \
-            -e 's=^(sd.[0-9][0-9]):=\1+\1:=' \
-            -e 's=^(sd.)([0-9]):=\10\2+\1\2:=' \
+            -e 's=^([sv]d.[0-9][0-9]):=\1+\1:=' \
+            -e 's=^([sv]d.)([0-9]):=\10\2+\1\2:=' \
         | sort \
-        | sed -e 's/^sd.[0-9][0-9]+//' -e 's/://'
+        | sed -e 's/^[sv]d.[0-9][0-9]+//' -e 's/://'
 }
 
 #------------------------------------------------------------------------------
@@ -4530,6 +4531,7 @@ make_swap_file() {
         return
     fi
 
+    #. Creating <size> swap file at <filename>.  Please be patient ...
     msg  "$_Creating_X_swap_file_at_Y_Please_be_patient_" "$(pq $raw_size)" "$(pq $file)"
 
     if tsplash_enabled; then
@@ -5900,9 +5902,8 @@ copy_homefs() {
     return 0
 }
 
-
 #------------------------------------------------------------------------------
-#
+# Disable login on tty1
 #------------------------------------------------------------------------------
 disable_tty1() {
     local dir=$1
@@ -5910,7 +5911,7 @@ disable_tty1() {
 }
 
 #------------------------------------------------------------------------------
-#
+# Automatically log in on given set of virtual consoles
 #------------------------------------------------------------------------------
 auto_login() {
     local dir file full prog=$1  terms=$2 root=$3
