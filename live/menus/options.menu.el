@@ -2,8 +2,8 @@
    2)  checkmd5        Ελέγξτε την ακεραιότητα του livecd/liveusb
    3)  checkfs         Ελέγξτε LiveUSB και persist συστήματα αρχείων ext2/3/4
    4)  toram           Αντιγράψτε το συμπιεσμένο σύστημα αρχείων στη μνήμη RAM
-   5)  i915_invert     Invert video on some Intel graphics systems
-   6)  no_i915_invert  Disable Intel graphics invert
+   5)  i915_invert     Ανατρέψτε το βίντεο σε ορισμένα συστήματα γραφικών της Intel
+   6)  no_i915_invert  Απενεργοποιήστε την αντιστροφή γραφικών της Intel
    7)  from=usb        Ολοκληρώνει την εκκίνηση από ένα LiveUSB
    8)  from=hd         Ολοκληρώνει την εκκίνηση από ένα σκληρό δίσκο
    9)  hwclock=ask     Προσδιορίσετε τη ρύθμιση του ρολόι

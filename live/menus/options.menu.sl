@@ -1,6 +1,6 @@
    1)  Privzeto
    2)  checkmd5        Check integrity of the live media
-   3)  checkfs         Check LiveUSB and persistence ext2/3/4 file systems
+   3)  checkfs         Preveri živi USB in obstojnost ext2/3/4 datotečnega sistema
    4)  toram           Copy the compressed file system to RAM
    5)  i915_invert     Invert video on some Intel graphics systems
    6)  no_i915_invert  Disable Intel graphics invert
