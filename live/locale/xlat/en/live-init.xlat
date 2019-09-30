@@ -40,3 +40,4 @@ _Setting_console_blanking_timeout_to_X_minute_s_="Setting console blanking timeo
 _Setting_desktop_theme_to_X_="Setting desktop theme to %s"
 _Unknown_menu_localization_language_X_="Unknown menu localization language %s"
 _Using_X_to_make_xorg_conf_="Using X to make xorg.conf"
+_disabling_modeset_for_X_="disabling modeset for %s"
