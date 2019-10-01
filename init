@@ -26,8 +26,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.22.10"
-           VERSION_DATE="Sun 29 Sep 2019 11:33:13 PM MDT"
+                VERSION="8.30.00"
+           VERSION_DATE="Tue 01 Oct 2019 03:57:53 PM MDT"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -955,6 +955,9 @@ read_cmdline_params()
 
                     i915_invert)  ;;
                  no_i915_invert)  ;;
+
+                         nuke=*)  ;;
+                         nonuke)  ;;
 
         #----- Some known codes -------------------------
 
@@ -2035,7 +2038,6 @@ find_device() {
     general_device_error "$find_type" "$type" "$value"
     return $err_ret
 }
-
 
 #------------------------------------------------------------------------------
 # Create a grub entry file that can be added to a grub.cfg for booting into
