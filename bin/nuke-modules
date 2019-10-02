@@ -150,6 +150,9 @@ do_update() {
 #------------------------------------------------------------------------------
 find_modules() {
     local from_dir=$1  find_expr=$2
+
+    test -d "$from_dir" || return
+
     if [ -z "$find_expr" ]; then
         find "$from_dir/"  -type f -name "*.ko" -printf "%f\n"
     else
@@ -175,7 +178,9 @@ undo_modules() {
 }
 
 #------------------------------------------------------------------------------
-#
+# Move files from under one directory to the same location nnder a different
+# directory.  If undo is set then we will move ALL modules if none are in
+# the list and we will also remove empty directories.
 #------------------------------------------------------------------------------
 move_modules() {
     local from_dir=$1  to_dir=$2 modules=$3  undo=$4
@@ -272,8 +277,8 @@ bash_set_minus() {
 #------------------------------------------------------------------------------
 set_minus() {
     local a=$1  b=$2 temp_file=$(tempfile minus-XXXXXX)
-    echo "$b" | tr -s ' '  '\n' | cat -s | sort > $temp_file
-    echo "$a" | tr -s ' '  '\n' | cat -s | sort | comm -23 - $temp_file
+    echo "$b" | tr -s ' '  '\n' | sed "/^$/d" | sort > $temp_file
+    echo "$a" | tr -s ' '  '\n' | sed "/^$/d" | sort | comm -23 - $temp_file
     rm $temp_file
 }
 
@@ -291,7 +296,7 @@ hw_kms_modules() {
 # Create a regular expression for all modules that depend on drm.ko
 #------------------------------------------------------------------------------
 kms_modules_regex() {
-    all_kms_modules | sed -e "s/[_-]/[_-]/" | cat -s | tr '\n' '|' | sed "s/|$//"
+    all_kms_modules | sed -e "s/[_-]/[_-]/" | sed "/^$/d" | tr '\n' '|' | sed "s/|$//"
 }
 
 #------------------------------------------------------------------------------
