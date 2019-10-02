@@ -265,10 +265,13 @@ do_start() {
             #. Found <KMS> video module(s) <module-name(s)>
             echo_live "$_Found_X_video_module_s_Y_" KMS "$(pquote $(echo $hw_kms_modules))"
 
-            # May set XORG_DRIVER
-            detect_uxa_hardware "$hw_kms_modules"
 
-            [ "$SAFE_VIDEO" ] && do_safe_video "$NUKE_VIDEO" "$hw_kms_modules"
+            if [ "$SAFE_VIDEO" ]; then
+                do_safe_video "$NUKE_VIDEO" "$hw_kms_modules"
+            else
+                # May set XORG_DRIVER
+                detect_uxa_hardware "$hw_kms_modules"
+            fi
 
         elif [ "$hw_video_modules" ]; then
             echo_live "$_Found_X_video_module_s_Y_" "non-KMS" "$(pquote $(echo $hw_video_modules))"
