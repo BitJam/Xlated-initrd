@@ -248,6 +248,7 @@ do_start() {
             case $param in
                      safe) SAFE_VIDEO=true                      ;;
                      nuke) SAFE_VIDEO=true ; NUKE_VIDEO=true    ;;
+                  busid=*) XORG_BUS_ID=busid=${param#*=}        ;;
             *[0-9]x[0-9]*)                                      ;;
                         *) XORG_DRIVER=$param                   ;;
             esac
@@ -265,7 +266,6 @@ do_start() {
             #. Found <KMS> video module(s) <module-name(s)>
             echo_live "$_Found_X_video_module_s_Y_" KMS "$(pquote $(echo $hw_kms_modules))"
 
-
             if [ "$SAFE_VIDEO" ]; then
                 do_safe_video "$NUKE_VIDEO" "$hw_kms_modules"
             else
@@ -277,7 +277,7 @@ do_start() {
             echo_live "$_Found_X_video_module_s_Y_" "non-KMS" "$(pquote $(echo $hw_video_modules))"
             video_tweak "non-kms video driver: $(echo $hw_video_modules)"
             # May set XORG_DRIVER
-            detect_sisimedia_driver "$hw_video_modules"
+            [ -z "$SAFE_VIDEO" ] && detect_sisimedia_driver "$hw_video_modules"
 
         else
             # We get here if there is no hardware specific video driver so we want to
@@ -296,7 +296,10 @@ do_start() {
             fi
         fi
 
-        [ "$SAFE_VIDEO" -o -n "$XORG_DRIVER" ] && make_xorg $XORG_DRIVER
+        # Set driver to "vesa" or "fbdeb" but let user over-ride
+        [ "$SAFE_VIDEO" ] && : ${XORG_DRIVER:=$DEFAULT_VDRIVER}
+
+        [ -n "$XORG_DRIVER$XORG_BUS_ID" ] && make_xorg "$XORG_DRIVER" "$XORG_BUS_ID"
 
     fi
 
@@ -809,13 +812,13 @@ detect_sisimedia_driver() {
     case $video_modules in *sis[_-]apg*) ;; *) return ;; esac
 
     #. Found <type> kernel modules ...
-    echo_live "$_Found_X_kernel_modules_" sis-agp
+    echo_live "$_Found_X_kernel_modules_" sis-apg
 
     have_X_driver $sisi_driver || return
     #. Found <driver-name> video driver
     echo_live "$_Found_X_video_driver_" $sisi_driver
 
-    video_tweak "Use sismedia xorg driver"
+    video_tweak "Use $sisi_driver xorg driver"
 
     # Use the "sisimedia" driver unless another was specified
     : ${XORG_DRIVER:=$sisi_driver}
@@ -848,12 +851,15 @@ video_tweak() { echo "$*" >> $VIDEO_TWEAKS_FILE ; }
 # A simple wrapper for make-xorg-conf
 #------------------------------------------------------------------------------
 make_xorg() {
-    local xorg=/etc/X11/xorg.conf  driver=${1:-$DEFAULT_VDRIVER}
+    local file=/etc/X11/xorg.conf  driver=$1  bus_id=$2
+
+    [ -z "$*" ] && return
 
     #. Configuring <xorg.conf> file with <driver>
-    echo_live "$_Configuring_X_file_with_Y_" $(pquote $xorg) $(pquote $driver)
-    backup_file $xorg
-    /sbin/make-xorg-conf --output=$xorg $driver
+    echo_live "$_Configuring_X_file_with_Y_" "$(pquote $file)" "$(pquote "$*")"
+
+    backup_file $file
+    /sbin/make-xorg-conf --output=$file $driver $bus_id
 }
 
 # End of new safe video code
