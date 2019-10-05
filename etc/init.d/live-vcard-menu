@@ -13,12 +13,17 @@
 ### END INIT INFO
 
 
-export PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin
+export PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin:/live/bin
+
+test -d /live/config/tsplash && DO_TSPLASH=true
 
 vcard_conf_file=/live/config/vcard-menu
 XORG_BUS_ID_FILE="/etc/X11/xorg-bus-id"
 
 . /live/lib/live-init-utils.sh
+start_init_logging
+# FIXME: load_translation
+
 
 main() {
     case $1 in
@@ -28,11 +33,7 @@ main() {
     esac
 }
 
-
 do_start() {
-
-    start_init_logging
-    # FIXME: load_translation
 
     local mode=$(cat $vcard_conf_file 2>/dev/null)
     # sanity check
@@ -43,11 +44,11 @@ do_start() {
                *) echo_live "Uknown vcard_menu mode %s" "$mode"
                   return ;;
     esac
-    
+
     echo_script "Video card selection menu" $0
 
-    local lspci_graphics=$(lspci_graphics)
-    local card_cnt=$(echo "$lspci_graphics" | wc -l)
+    local LSPCI_GRAPHICS=$(lspci_graphics)
+    local card_cnt=$(echo "$LSPCI_GRAPHICS" | wc -l)
 
     case $card_cnt in
         0) echo_live "No video cards found" ; return ;;
@@ -57,7 +58,7 @@ do_start() {
     local card_id  bus_id=$(cat $XORG_BUS_ID_FILE 2>/dev/null)
 
     if [ -n "$bus_id" ]; then
-        id_card=$(echo "$lspci_graphics" | sed -n "s/^$bus_id //p")
+        id_card=$(get_card "$bus_id")
 
         if [ -z "$id_card" ]; then
             echo_live "Found bus-id %s but did not find associated card" "$(pquote $bus_id)"
@@ -70,15 +71,17 @@ do_start() {
     # Don't run menu if we already created a valid xorg-bus-id file
     ! force && [ -n "$XORG_BUS_ID" ] && return
 
-    video_card_menu "$lspci_graphics"
+    set_colors
+    video_card_menu "$LSPCI_GRAPHICS"
 
     [ -z "$NEW_BUS_ID" ] && return
+    local new_card=$(get_card "$NEW_BUS_ID")
 
-    echo_live  "Using bus id %s" "$(pquote $NEW_BUS_ID)"
+    [ "$DO_TSPLASH" ] && /live/bin/tell-tsplash alert "$(printf "Using card %s" "$new_card")"
+    echo_live  "Using card %s" "$(pquote $new_card)"
 
-    # Don't use the same bus-id as before (?????)
     [ "$NEW_BUS_ID" = "$XORG_BUS_ID" ] && return
-    
+
     # Send it as a cmdline parameter to live-init
     echo "xorg=busid=$NEW_BUS_ID" >> /live/config/cmdline2
 }
@@ -87,8 +90,7 @@ do_start() {
 # Select a video card bus_id based on the names
 #------------------------------------------------------------------------------
 video_card_menu() {
-    local lspci_graphics=$(lspci_graphics)
-    local card_cnt=$(echo "$lspci_graphics" | wc -l)
+    local card_cnt=$(echo "$LSPCI_GRAPHICS" | wc -l)
 
     case $card_cnt in
         0) say "No video cards found"      ; return ;;
@@ -104,14 +106,18 @@ video_card_menu() {
         cnt=$((cnt + 1))
         # echo "id: $id   text: $text"
     done<<Lspci_nn
-$(munge_lspci "$lspci_graphics")
+$(munge_lspci "$LSPCI_GRAPHICS")
 Lspci_nn
 
     data="${data}0:quit\n"
     disp="$disp$(printf "$disp_fmt" "0" "quit")\n"
 
+    [ "$DO_TSPLASH" ] && tsplash_clear
+
     local new_bus_id  title="Please select a video card to use"
     my_select_2 "$title" new_bus_id "0" "$data" "$disp"
+
+    [ "$DO_TSPLASH" ] && tsplash-on
 
     if [ "$new_bus_id" = "quit" ]; then
         say "Not selecting a video card"
@@ -124,11 +130,23 @@ Lspci_nn
 # Remove class description, horten some of the text, and removed the pci-id
 #------------------------------------------------------------------------------
 munge_lspci() {
-    echo "$1" | sed -r -n "s/^([0-9a-f:.]+) [^:]+: /\1 /pi"  \
-        | sed -r -e "s/Advanced Micro Devices, Inc\./AMD/" \
+    echo "$1" | sed -r -n "s/^([0-9a-f:.]+) [^:]+: /\1 /pi"  | shorten_lspci
+ }
+
+shorten_lspci() {
+    sed -r -e "s/Advanced Micro Devices, Inc\./AMD/" \
         -e "s/ \[AMD\/ATI\]//" -e "s/\[AMD\]//" \
         -e "s/(NVIDIA|Intel) Corporation/\1/" \
         -e "s/ \[[0-9a-f]{4}:[0-9a-f]{4}\]//i"
+}
+
+#------------------------------------------------------------------------------
+# Find the text description of a pci card based on the bus id
+#------------------------------------------------------------------------------
+get_card() {
+    local bus_id=$1
+    echo "$LSPCI_GRAPHICS" | sed -n "s/^$bus_id //p" \
+        | sed -r "s/^[^:]*: //" | shorten_lspci
 }
 
 #------------------------------------------------------------------------------
@@ -280,6 +298,17 @@ set_colors() {
       hi_co=$white
        m_co=$nc_co
      num_co=$white
+}
+
+tsplash_clear() {
+    [ "$DO_TSPLASH" ] || return
+
+    if [ -z "$TSPLASH_CLEARED" ]; then
+        clear
+        sleep .2
+        TSPLASH_CLEARED=true
+    fi
+    chvt 1
 }
 
 force() { [ "$FORCE" ] ; return $?; }
