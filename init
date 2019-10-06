@@ -26,8 +26,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.30.06"
-           VERSION_DATE="Sat 05 Oct 2019 01:55:17 AM MDT"
+                VERSION="8.30.07"
+           VERSION_DATE="Sun 06 Oct 2019 02:50:25 PM MDT"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -6004,21 +6004,18 @@ copy_xtra() {
 
     if [ -e $tarball ]; then
         msg 'Unpack xtra tarball'
-        gunzip -c $tarball | tar x -C $NEW_ROOT/
+        gunzip -c "$tarball" | tar x -C $NEW_ROOT/
     fi
 
     [ -d "$xtra_dir" ] || return
+
     local list=$(ls $xtra_dir)
     [ -n "$list" ] || return
 
-    msgN 'Copy xtra file(s) to:'
-    for  dir in $list; do
-        [ -d "$xtra_dir/$dir" ] || continue
-        #msgN " $from_co/$dir"
-        msg " $from_co/$dir"
-        log_cmd cp -a $xtra_dir/$dir $NEW_ROOT/
-    done
-    msg
+    msg 'Copy xtra file(s) to: %s' "$(fq $list)"
+
+    # Use tar because cp stumbles on some symlinks in target directory
+    (cd "$xtra_dir" && tar cf - *) | tar x -C "$NEW_ROOT"
 
      # Create a symlink to the /antiX/xtra directory if it exists
     local r_dir="$NEW_ROOT/root"
