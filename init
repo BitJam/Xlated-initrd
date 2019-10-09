@@ -26,8 +26,8 @@
 # that you don't want users to be able to adjust.
 
                      ME="initrd init"
-                VERSION="8.30.07"
-           VERSION_DATE="Sun 06 Oct 2019 02:50:25 PM MDT"
+                VERSION="8.30.08"
+           VERSION_DATE="Tue 08 Oct 2019 06:19:28 PM MDT"
               DEVELOPER="BitJam"
          BUG_REPORT_URL="liveboot@antixlinux.org"
 
@@ -151,9 +151,8 @@ KMS_VIDEO_MODULES="amdgpu,analogix-anx78xx,ast,bochs-drm,ch7006,cirrus,gma500_gf
        TSPLASH_TTY=10
             MY_TTY=1
 
-# could be "off" "on" or "force"
-VCARD_MENU_DEFAULT="on"
-
+# could be "off" "on" "menu" or "clear"
+VCARD_CMD_DEFAULT="on"
 
     #           HUP INT QUIT SEGV TERM
     SIGNAL_LIST="1   2   3    11   15"
@@ -278,8 +277,8 @@ main_wrapper() {
     # remove_from_runlevel lightdm 3
 
     # Try running live-usb-save first so it can restore an xorg.conf machine-state file
-    # We run live-vcard-menu 2nd, right after live-usb-save
-    confile vcard-menu   && LIVE_SCRIPTS="live-vcard-menu $LIVE_SCRIPTS"
+    # We run live-vcard 2nd, right after live-usb-save
+    confile vcard-cmd    && LIVE_SCRIPTS="live-vcard    $LIVE_SCRIPTS"
     confile remasterable && LIVE_SCRIPTS="live-usb-save $LIVE_SCRIPTS"
     confile hwclock      && LIVE_SCRIPTS="$LIVE_SCRIPTS live-hwclock"
     confile persist-root force-passwd && LIVE_SCRIPTS="$LIVE_SCRIPTS persist-password"
@@ -615,10 +614,10 @@ main_core() {
     # FIXME: do this after copy_xtra for easy testing (for now) (????)
     PROC_CMDLINE=$(cat /live/config/proc-cmdline)
 
-    case $VCARD_MENU in
-             off) ;;
-        on|force) echo $VCARD_MENU > /live/config/vcard-menu                        ;;
-               *) warn  "$_Unexpected_X_value_Y_" "$(pqw vcard_menu)" "$(VCARD_MENU)" ;;
+    case $VCARD_CMD in
+                  off)                                                             ;;
+        on|menu|clear) echo $VCARD_CMD > /live/config/vcard-cmd                    ;;
+                    *) warn  "$_Unexpected_X_value_Y_" "$(pqw vcard)" "$(VCARD_CMD)" ;;
     esac
 
     [ "$DO_MENUS" ] && do_late_menus
@@ -799,8 +798,7 @@ read_cmdline_params()
                       overlayfs) WANT_UNIONFS=overlay                            ;;
                           menus) DO_MENUS=${MENUS_LIST:-cltopfsv}                ;;
                         menus=*) DO_MENUS=$DO_MENUS$value                        ;;
-                     vcard_menu) VCARD_MENU=on                                   ;;
-                   vcard_menu=*) VCARD_MENU=$value                               ;;
+                        vcard=*) VCARD_CMD=$value                                ;;
             rootdelay=*|delay=*) small_int COLDPLUG_DELAY $param                 ;;
                          splash) SPLASH_PARAM=v                                  ;;
                        splash=*) SPLASH_PARAM=$value                             ;;
@@ -1007,9 +1005,9 @@ read_cmdline_params()
 
     # Enable vcard menu from menus=*v* unless it was set explicitly
     if [ -n "$DO_MENUS" -a -z "${DO_MENUS##*v*}" ]; then
-        : ${VCARD_MENU:=on}
+        : ${VCARD_CMD:=on}
     fi
-    : ${VCARD_MENU:=$VCARD_MENU_DEFAULT}
+    : ${VCARD_CMD:=$VCARD_CMD_DEFAULT}
 }
 
 #------------------------------------------------------------------------------
@@ -6242,9 +6240,7 @@ Initrd_Out
     [ "$DID_TORAM" ] && [ "$(stat -c %t $SQFILE_DEV)" = b ] \
         && echo "BOOT_DEV=$SQFILE_DEV" > $dir/toram-eject
 
-    [ -d /sys/class/power_supply ] \
-        && grep -q Battery /sys/class/power_supply/*/type 2>/dev/null \
-        && touch $dir/laptop
+    is_laptop && touch $dir/laptop
 
     local f full
     for f in version $MADE_BY_FILE; do
@@ -6269,6 +6265,21 @@ update_store_file() {
     elif [ "$enable" ]; then
         rm -f $no_store_file
     fi
+}
+
+
+#------------------------------------------------------------------------------
+# Is this a laptop?  For the first test see:
+# https://superuser.com/questions/877677/programatically-determine-if-an-script-is-being-executed-on-laptop-or-desktop/877796
+#------------------------------------------------------------------------------
+is_laptop() {
+    local chassis=$(cat /sys/class/dmi/id/chassis_type 2>/dev/null)
+    case $chassis in
+        9|10|14) return 0 ;;
+    esac
+
+    grep -q Battery /sys/class/power_supply/BAT*/type 2>/dev/null
+    return $?
 }
 
 #------------------------------------------------------------------------------
