@@ -56,6 +56,7 @@ do_start() {
     echo_script "Video card selection" $0
 
     save_vcard_mode "$vcard_mode" "$saved_mode"
+    saved_mode=$vcard_mode
 
     # sanity check
     case $vcard_mode in
@@ -145,6 +146,13 @@ do_start() {
                  *) fatal "internal menu error on %s" "$NEW_BUS_ID" ;;
     esac
 
+    # If the choose delete or quit/disable then remember that decision by
+    # setting the rememebered state to "off"
+    case $NEW_BUS_ID in
+        quit|delete:*) save_vcard_mode 'off' "$saved_mode" ;;
+    esac
+
+
     if [ -n "$bus_id" ]; then
         local new_card=$(get_card "$bus_id")
 
@@ -199,7 +207,7 @@ Lspci_nn
     local file bold_fmt="$green %%2s)${yellow} %s$nc_co"
     local del_fmt=$(printf "$bold_fmt"       "Delete file %s")
     local del_all_fmt=$(printf "$bold_fmt"   "Delete all %s files")
-    local quit_fmt=$(printf "$bold_fmt"      "Quit")
+    local quit_fmt=$(printf "$bold_fmt"      "Quit/disable")
 
     local found_cnt=0
     for file in $DISABLE_FILE $XORG_BUS_ID_FILE; do
@@ -254,14 +262,14 @@ get_card() {
 #------------------------------------------------------------------------------
 lspci_graphics() {
     #lspci "$@"
-    local file  dir=/live/test
+    local file  dir=/live/boot-dev/test
     case $1 in
         -nn) file=$dir/lspci-nn ;;
     -nk|-kn) file=$dir/lspci-nk ;;
     esac
 
     if [ -n "$file" ] && test -e $file; then
-        echo "found $file" > /dev/null
+        #echo "found $file" >&2
         cat $file
         return
     fi
